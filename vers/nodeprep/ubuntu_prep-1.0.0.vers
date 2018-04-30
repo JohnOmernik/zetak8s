@@ -1,0 +1,64 @@
+#!/bin/bash
+
+REPO_TOOLS="ipset unzip bc nfs-common syslinux nano git jq apt-transport-https"
+
+if [ ! -d "./bin" ]; then
+    mkdir -p ./bin
+fi
+cat > ./bin/ubuntu_prep.sh << EOF
+#!/bin/bash
+echo "Adding K8s Repo"
+curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
+sudo tee /etc/apt/sources.list.d/kubernetes.list <<- EOK
+deb http://apt.kubernetes.io/ kubernetes-xenial main
+EOK
+
+echo "Cleaning rc.local"
+sudo sed -i "s/exit 0//g" /etc/rc.local
+
+echo "Disabling Plymouth"
+echo "/bin/rm -f /etc/init.d/plymouth* > /dev/null 2>&1"  | sudo tee -a /etc/rc.local
+
+# Add Docker Key and Repo
+echo "Updating System"
+
+export DEBIAN_FRONTEND=noninteractive
+sudo apt-get update
+sudo DEBIAN_FRONTEND=noninteractive UCF_FORCE_CONFFNEW=YES apt-get upgrade -yq -o Dpkg::Options::="--force-confyes"
+sudo DEBIAN_FRONTEND=noninteractive UCF_FORCE_CONFFNEW=YES apt-get dist-upgrade -qq --force-yes
+# Remove some defaults
+sudo apt-get purge lxc-docker
+sudo apt-get remove -y command-not-found
+
+#Create Docker conf file to use overlay network
+sudo mkdir -p /etc/systemd/system/docker.service.d && sudo tee /etc/systemd/system/docker.service.d/override.conf <<- EOS
+[Service]
+ExecStart=
+ExecStart=/usr/bin/docker daemon --storage-driver=overlay -H fd://
+EOS
+
+#Install Docker
+sudo apt-get install -y -q docker.io
+sudo systemctl enable docker
+
+# Install some common tools
+sudo apt-get install -y $REPO_TOOLS
+
+# Install K8s
+sudo apt-get install -y kubelet kubeadm kubectl
+
+# Update DefaultTasksMax to infinifty for DCOS
+echo "DefaultTasksMax=infinity"|sudo tee -a /etc/systemd/system.conf
+
+# Check for /mnt in fstab - This is because sometime Amazon will mount a volumt to /mnt when we don't want it mounted there. 
+CHK=\$(sudo grep "\/mnt" /etc/fstab|cut -f1)
+if [ "\$CHK" != "" ]; then
+    echo "Updating weird mount of /mnt"
+    sudo sed -i "s@\$CHK@#\$CHK@" /etc/fstab
+fi
+
+# Now that we have Docker, we are patched, etc, reboot"
+sudo shutdown -r now
+
+EOF
+

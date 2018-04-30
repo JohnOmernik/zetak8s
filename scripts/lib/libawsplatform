@@ -1,0 +1,184 @@
+#!/bin/bash
+#
+# libawsplatform - Library scripts to define out functions for aws
+#
+# plat_install - install the command line tools for the platform
+DEFAULT_PLAT_USERS="ubuntu centos"
+DEFAULT_PLAT_NETWORK="eth0"
+DEFAULT_PLAT_CMD="aws"
+DEFAULT_PLAT_VER="--version"
+DEFAULT_INST_TYPE="t2.xlarge"
+DEFAULT_ZONE="us-west-2c"
+DEFAUT_IMG="ami-4e79ed36" # Ubuntu 16.04
+
+function plat_install(){
+    echo "--------------------------------------------"
+    echo "aws command not found, attempting to install"
+    echo "--------------------------------------------"
+    curl -O https://bootstrap.pypa.io/get-pip.py
+    python3 get-pip.py --user
+    pip install awscli --upgrade --user
+    $PLAT_VER
+    if [ "$?" != "0" ]; then
+        echo "We were unable to get the platform command $PLAT_CMD installed.  Please manually install before proceeding. Also ensure it's in the path correctly, or update the PLAT_CMD to be a absoluate path"
+    else
+        echo "Platform installed correctly!"
+    fi
+    rm get-pip.py
+
+}
+
+
+function test_plat(){
+    echo "Hey it looks like the AWS libawsplatform has been imported correctly!"
+}
+
+
+function ret_init_inst(){
+    local RESULT=$1
+    if [ -f ./bin/init_output.json ]; then
+        INST_OUT=$(cat ./bin/init_output.json)
+        SPOT_INSTS=""
+        for X in $(echo "$INST_OUT"|jq  -r ".SpotInstanceRequests[] | .SpotInstanceRequestId"); do
+            if [ "$SPOT_INSTS" == "" ]; then
+                SPOT_INSTS="$X"
+            else
+                SPOT_INSTS="$SPOT_INSTS $X"
+            fi
+        done
+    else
+        SPOT_INSTS=""
+    fi
+    eval $RESULT="'$SPOT_INSTS'"
+}
+
+function ret_vpc_by_instance_id(){
+    local INSTANCE_ID=$1
+    local VID=$2
+    INSTS=$(aws ec2 describe-instances)
+    INST_DATA=$(echo "$INSTS"|jq -r ".Reservations[]|.Instances[]|.InstanceId + \" \" + .SpotInstanceRequestId + \" \" + .PrivateIpAddress + \" \" + .PublicIpAddress + \" \" + .VpcId")
+    OUTVPC=""
+    for INST in $INST_DATA; do
+        INST_ID=$(echo "$IDATA"|cut -d" " -f1)
+        INTERNAL_IP=$(echo "$IDATA"|cut -d" " -f3)
+        EXTERNAL_IP=$(echo "$IDATA"|cut -d" " -f4)
+        VPC_ID=$(echo "$IDATA"|cut -d" " -f5)
+        if [ "$INST_ID" == "$INSTANCE_ID" ]; then
+            OUTVPC="$VPC_ID"
+        fi
+    done
+    eval $SCID="'$OUTVPC'"
+}
+
+
+function ret_subnet_by_instance_id(){
+    local INSTANCE_ID=$1
+    local SID=$2
+    INSTS=$(aws ec2 describe-instances)
+    INST_DATA=$(echo "$INSTS"|jq -r ".Reservations[]|.Instances[]|.InstanceId + \" \" + .SpotInstanceRequestId + \" \" + .PrivateIpAddress + \" \" + .PublicIpAddress + \" \" + .SubnetId")
+    OUTSUB=""
+    for INST in $INST_DATA; do
+        INST_ID=$(echo "$IDATA"|cut -d" " -f1)
+        INTERNAL_IP=$(echo "$IDATA"|cut -d" " -f3)
+        EXTERNAL_IP=$(echo "$IDATA"|cut -d" " -f4)
+        SUB_ID=$(echo "$IDATA"|cut -d" " -f5)
+        if [ "$INST_ID" == "$INSTANCE_ID" ]; then
+            OUTSUB="$SUB_ID"
+        fi
+    done
+    eval $SID="'$OUTSUB'"
+}
+
+function ret_init_ips() {
+    local RESULT=$1
+    local SPOT_INSTS=$2
+    local NOOUTPUT=$3
+
+
+    INSTS=$(aws ec2 describe-instances)
+    INST_DATA=$(echo "$INSTS"|jq -r ".Reservations[]|.Instances[]|.InstanceId + \" \" + .SpotInstanceRequestId + \" \" + .PrivateIpAddress + \" \" + .PublicIpAddress")
+
+        #Nodes are ; sep, instid,spotid,intip,extip,hname;instid,spotid,initip,extip,hname
+    if [ "$SPOT_INSTS" != "" ]; then
+        INST_STRING=""
+        for SPOT_ID in $SPOT_INSTS; do
+            IDATA=$(echo "$INST_DATA"|grep "$SPOT_ID")
+            INST_ID=$(echo "$IDATA"|cut -d" " -f1)
+            INTERNAL_IP=$(echo "$IDATA"|cut -d" " -f3)
+            EXTERNAL_IP=$(echo "$IDATA"|cut -d" " -f4)
+            HNAME_TMP=$(echo -n "$INTERNAL_IP"|sed "s/\./-/g")
+            HNAME="ip-${HNAME_TMP}"
+
+
+            if [ "$NOOUTPUT" != "1" ]; then
+                echo ""
+                echo "Looking for Spot Inst: $SPOT_ID"
+
+                echo "Found Instance ID: $INST_ID"
+                echo "IPs: Internal: $INTERNAL_IP - External: $EXTERNAL_IP - Hostname: $HNAME"
+                echo ""
+            fi
+            if [ "$INST_STRING" == "" ]; then
+                INST_STRING="${INST_ID},${SPOT_ID},${INTERNAL_IP},${EXTERNAL_IP},${HNAME}"
+            else
+                INST_STRING="${INST_STRING};${INST_ID},${SPOT_ID},${INTERNAL_IP},${EXTERNAL_IP},${HNAME}"
+            fi
+        done
+    else
+        for IDATA in $INST_DATA; do
+            INST_ID=$(echo "$IDATA"|cut -d" " -f1)
+            INTERNAL_IP=$(echo "$IDATA"|cut -d" " -f3)
+            EXTERNAL_IP=$(echo "$IDATA"|cut -d" " -f4)
+            HNAME_TMP=$(echo -n "$INTERNAL_IP"|sed "s/\./-/g")
+            HNAME="ip-${HNAME_TMP}"
+
+            if [ "$NOOUTPUT" != "1" ]; then
+                echo ""
+                echo "Found Instance ID: $INST_ID"
+                echo "IPs: Internal: $INTERNAL_IP - External: $EXTERNAL_IP"
+                echo ""
+            fi
+            if [ "$INST_STRING" == "" ]; then
+                INST_STRING="${INST_ID},na,${INTERNAL_IP},${EXTERNAL_IP},${HNAME}"
+            else
+                INST_STRING="${INST_STRING};${INST_ID},na,${INTERNAL_IP},${EXTERNAL_IP},${HNAME}"
+            fi
+        done
+    fi
+
+    eval $RESULT="'$INST_STRING'"
+
+
+}
+
+function write_spec_json(){
+    DRIVES="b c d e f g h i j k l m n o p q r s t u v w x y z"
+    OUTDRIVE=""
+    OS_DRIVE="{ \"DeviceName\": \"/dev/sda1\", \"Ebs\": { \"VolumeSize\": $INIT_OS_SIZE } },"
+    OUTDRIVE="$OS_DRIVE"$'\n'
+    DCOUNT=0
+    for X in $DRIVES; do
+        if [ "$DCOUNT" -lt "$INIT_NUM_DATA_VOL" ]; then
+            OUTDRIVE="$OUTDRIVE{ \"DeviceName\": \"/dev/sd$X\", \"Ebs\": { \"VolumeSize\": $INIT_DATA_SIZE } },"$'\n'
+        fi
+        DCOUNT=$(( $DCOUNT + 1 ))
+    done
+    OUTDRIVE=$(echo -n "$OUTDRIVE"|tr '\n' '~'|sed "s/,~$//"|tr "~" "\n")
+    echo "Outputting specifications to ./bin/specifification.json"
+cat > ./bin/specification.json << EOF
+{
+  "ImageId": "$INIT_IMG",
+  "KeyName": "$INIT_KEY_NAME",
+  "SecurityGroupIds": [ "$INIT_SEC_GROUP" ],
+  "InstanceType": "$INIT_INST_TYPE",
+  "Placement": {
+    "AvailabilityZone": "$INIT_ZONE"
+  },
+  "BlockDeviceMappings": [
+    $OUTDRIVE
+  ]
+}
+EOF
+
+
+}

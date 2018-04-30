@@ -1,0 +1,73 @@
+#!/bin/bash
+
+#
+# Create all the certificates for the bootstrapped K8s Cluster
+#
+
+sourceconf "$PLATFORM_CONF"
+sourceconf "$CA_CONF"
+sourceconf "$K8S_CONF"
+function _initk8scerts(){
+
+    MYWD=$(pwd)
+
+    if [ ! -d "./conf/ca" ]; then
+        echo "CA not created please run ./zeta ca create ca"
+        exit 1
+    fi
+    ret_init_inst "SPOT_INSTS"
+
+    if [ "$SPOT_INSTS" == "" ]; then
+        @go.log FATAL "No Noes running exiting"
+    fi
+    ret_init_ips "INST_STR" "$SPOT_INSTS" 1
+    if [ "$INST_STR" == "" ]; then
+        @go.log FATAL "No output from status: exiting"
+    fi
+
+    INST_STR=$(echo "$INST_STR"|tr ";" " ")
+
+    echo ""
+    echo "-----------------------------------"
+    echo "Creating Admin Certificate"
+    echo "-----------------------------------"
+    echo ""
+    ./zeta ca createcert -u -cn="admin" -o="system:masters"
+    echo ""
+    echo "-----------------------------------"
+    echo "Creating Worker Certificates"
+    echo "-----------------------------------"
+    echo ""
+    for WN in $(echo "$WORKER_NODES"|tr "," " "); do
+        WN_INST=""
+        for INST in $INST_STR; do
+            T=$(echo "$INST"|grep "$WN")
+            if [ "$T" != "" ]; then
+                WN_INST="$INST"
+            fi
+        done
+        INT_IP=$(echo "$WN_INST"|cut -d"," -f3)
+        EXT_IP=$(echo "$WN_INST"|cut -d"," -f4)
+        HNAMES="$WN,$INT_IP,$EXT_IP"
+        ./zeta ca createcert -u -cn="$WN" -cncert="system:node:$WN" -o="system:nodes" -h="$HNAMES"
+    done
+
+    echo ""
+    echo "-----------------------------------"
+    echo "Creating Proxy Certificate"
+    echo "-----------------------------------"
+    echo ""
+    ./zeta ca createcert -u -cn="kube-proxy" -cncert="system:kube-proxy" -o="system:nodes"
+    echo ""
+    echo "-----------------------------------"
+    echo "Creating External API Certificate"
+    echo "-----------------------------------"
+    echo ""
+    EXT_HOSTS="127.0.0.1,kubernetes.default,${ALL_NODES_EXT_IP},${ALL_NODES_INT_IP}"
+    echo ""
+    ./zeta ca createcert -u -cn="kubernetes" -o="kubernetes" -h="$EXT_HOSTS"
+
+
+}
+_initk8scerts "$@"
+

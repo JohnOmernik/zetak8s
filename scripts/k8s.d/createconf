@@ -1,0 +1,194 @@
+#!/bin/bash
+#
+# Create conf file for initial K8s installation
+#
+
+sourceconf "$PLATFORM_CONF"
+sourceconf "$CA_CONF"
+
+
+
+if [ ! -f "./bin/kubectl" ]; then
+    @go.log WARN "Downloading kubectl"
+    wget https://storage.googleapis.com/kubernetes-release/release/v1.9.0/bin/linux/amd64/kubectl
+    mv kubectl ./bin/
+    chmod +x ./bin/kubectl
+fi
+KUBECTL="./bin/kubectl"
+echo ""
+echo "-----------------------------------"
+echo "This process will ask a series of questions in order to create a k8s.conf script for gettings nodes ready for Zeta"
+echo "The configuration will be located: $K8S_CONF"
+echo "-----------------------------------"
+echo ""
+echo ""
+ret_init_inst "SPOT_INSTS"
+
+if [ "$SPOT_INSTS" == "" ]; then
+    @go.log FATAL "No Noes running exiting"
+fi
+
+ret_init_ips "INST_STR" "$SPOT_INSTS" 1
+if [ "$INST_STR" == "" ]; then
+    @go.log FATAL "No output from status: exiting"
+fi
+INST_STR=$(echo "$INST_STR"|tr ";" " ")
+echo "---------------------------------------------"
+echo ""
+echo "First the admin nodes"
+echo "The admin/master nodes run etcd and the main Kubernetes servers"
+echo "We force you to to use at lease three nodes for HA purposes"
+echo "Here is list of the available nodes:"
+echo ""
+MYCNT=0
+MST=""
+ALL_NODES=""
+for INST in $INST_STR; do
+    INT_IP=$(echo "$INST"|cut -d"," -f3)
+    EXT_IP=$(echo "$INST"|cut -d"," -f4)
+    HNAME=$(echo "$INST"|cut -d"," -f5)
+    if [ "$ALL_NODES" == "" ]; then
+        ALL_NODES="$HNAME"
+        ALL_NODES_EXT_IP="$EXT_IP"
+        ALL_NODES_INT_IP="$INT_IP"
+    else
+        ALL_NODES="${ALL_NODES},$HNAME"
+        ALL_NODES_EXT_IP="$ALL_NODES_EXT_IP,$EXT_IP"
+        ALL_NODES_INT_IP="$ALL_NODES_INT_IP,$INT_IP"
+    fi
+    MYCNT=$(( $MYCNT + 1 )) 
+    if [ "$MYCNT" -lt 4 ]; then
+        if [ "$MST" == "" ]; then
+            MST="$HNAME"
+        else
+            MST="$MST,$HNAME"
+        fi
+    fi
+    echo "$HNAME   - $INST"
+done
+echo ""
+read -e -p "Please enter 3 or more hostnamess (comma sep) to use as masters: " -i "$MST" MASTER_NODES
+THREE_TEST=$(echo "$MASTER_NODES"|cut -d"," -f3)
+if [ "$THREE_TEST" == "" ]; then
+    @go.log FATAL "You must enter three master nodes!"
+fi
+
+for M in $(echo "$MASTER_NODES"|tr "," " "); do
+    for INST in $INST_STR; do 
+        T=$(echo "$INST"|grep "$M")
+        if [ "$T" != "" ]; then
+            INT_IP=$(echo "$INST"|cut -d"," -f3)
+            EXT_IP=$(echo "$INST"|cut -d"," -f4)
+            if [ "$MASTER_NODES_EXT_IP" == "" ]; then
+                MASTER_NODES_EXT_IP="$EXT_IP"
+                MASTER_NODES_INT_IP="$INT_IP"
+            else
+                MASTER_NODES_EXT_IP="$MASTER_NODES_EXT_IP,$EXT_IP"
+                MASTER_NODES_INT_IP="$MASTER_NODES_INT_IP,$INT_IP"
+            fi
+        fi
+    done
+done
+
+
+
+WORKER_NODES=""
+for INST in $INST_STR; do
+    HNAME=$(echo "$INST"|cut -d"," -f5)
+    INT_IP=$(echo "$INST"|cut -d"," -f3)
+    EXT_IP=$(echo "$INST"|cut -d"," -f4)
+    T=$(echo "$MASTER_NODES"|grep "$HNAME")
+    if [ "$T" == "" ]; then
+        if [ "$WORKER_NODES" == "" ]; then
+            WORKER_NODES="$HNAME"
+            WORKER_NODES_EXT_IP="$EXT_IP"
+            WORKER_NODES_INT_IP="$INT_IP"
+        else
+            WORKER_NODES="$WORKER_NODES,$HNAME"
+            WORKER_NODES_EXT_IP="$WORKER_NODES_EXT_IP,$EXT_IP"
+            WORKER_NODES_INT_IP="$WORKER_NODES_INT_IP,$INT_IP"
+        fi
+    fi
+done
+echo ""
+echo "The remaining nodes ($WORKER_NODES) will be used as worker nodes"
+echo ""
+echo ""
+read -e -p "Cluster name: " -i "myk8s" CLUSTERNAME
+echo ""
+echo "Please enter a POSIX client base mount point. This will be used, with the clustername as the basis for posix interaction with your shared filesystem"
+echo ""
+read -e -p "Cluster Mount point: " -i "zeta" CLUSTERBASE
+echo ""
+echo "Your cluster base is: $CLUSTERBASE"
+echo "Your cluster name is: $CLUSTERNAME"
+CLUSTERMOUNT="/$CLUSTERBASE/$CLUSTERNAME"
+echo "Your cluster posix mount point is $CLUSTERMOUNT"
+echo ""
+
+echo "DNS Resolution - Needs to be platform specfic"
+echo "This is needed for external DNS resolution, defaults are examples from an AWS region, please enure the resolve it correct for your installation"
+echo ""
+read -e -p "Space separated list of DNS resolver IPs: " -i "172.31.0.2" DNS_RESOLVERS
+echo ""
+read -e -p "DNS Search base: " -i "us-west-2.compute.internal" DNS_SEARCH
+echo ""
+
+echo ""
+echo "Cluster proxies. If your cluster needs HTTP_PROXY information to connect to the Internet, now is the time to enter that"
+echo "We will ask for both Proxy information, as well as NOPROXY information"
+echo ""
+echo "---------------------------------------"
+echo "If you need to specify a HTTP_PROXY for docker building, please enter it here"
+echo "If this variable is filled, it will add the proxy lines to the docker files for building the images"
+echo ""
+read -p "Enter the proxy information (blank for none): " ZETA_PROXY
+
+echo ""
+echo "---------------------------------------"
+echo "If you need to specify a NO_PROXY string it's highly recommended. Use your subnets and internal domain names"
+echo "Example: \"192.168.0.0/16,mycompany.com\""
+echo ""
+read -p "Enter the noproxy information (blank for none): " ZETA_NOPROXY
+
+echo ""
+read -e -p "Please enter pod network CIDR: " -i "192.168.0.0/16" K8S_CIDR_POD
+echo ""
+
+
+
+cat > $K8S_CONF << EOP
+#!/bin/bash
+
+#K8s layout
+MASTER_NODES="$MASTER_NODES"
+MASTER_NODES_EXT_IP="$MASTER_NODES_EXT_IP"
+MASTER_NODES_INT_IP="$MASTER_NODES_INT_IP"
+
+WORKER_NODES="$WORKER_NODES"
+WORKER_NODES_EXT_IP="$WORKER_NODES_EXT_IP"
+WORKER_NODES_INT_IP="$WORKER_NODES_INT_IP"
+
+ALL_NODES="$ALL_NODES"
+ALL_NODES_EXT_IP="$ALL_NODES_EXT_IP"
+ALL_NODES_INT_IP="$ALL_NODES_INT_IP"
+
+
+KUBECTL="$KUBECTL"
+#POD Network
+K8S_CIDR_POD="$K8S_CIDR_POD"
+
+#Proxy info
+ZETA_PROXY="$ZETA_PROXY"
+ZETA_NOPROXY="$ZETA_NOPROXY"
+
+#Cluster Mount Points
+CLUSTERBASE="$CLUSTERBASE"
+CLUSTERNAME="$CLUSTERNAME"
+CLUSTERMOUNT="$CLUSTERMOUNT"
+
+K8S_LOCKED="1"
+
+EOP
+
+

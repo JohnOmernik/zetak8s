@@ -1,0 +1,18 @@
+#!/bin/bash
+#
+# Generates a Key to use for Zeta
+#
+#
+
+sourceconf "$PREP_CONF"
+
+function _genkey() {
+    if [ ! -f "$OUT_KEY" ]; then
+        ssh-keygen -f $OUT_KEY -N "" -t RSA -C "Zeta"
+        @go.log INFO "Keys created at $OUT_KEY"
+    else
+        @go.log FATAL "Will not create key due to existing key at $OUT_KEY"
+    fi
+}
+
+_genkey "$@"

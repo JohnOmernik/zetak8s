@@ -1,0 +1,30 @@
+#! /bin/bash
+#
+# eval "$(%s env -)"
+
+__go_func() {
+  unset 'COMP_WORDS[0]'
+  local item
+  while IFS= read -r item; do
+    COMPREPLY+=("$item")
+  done < <("$_GO_SCRIPT" 'complete' "$((COMP_CWORD-1))" "${COMP_WORDS[@]}")
+}
+
+_go_func() {
+  local cmd="$1"
+  shift
+
+  case "$cmd" in
+  unenv)
+    complete -r '_go_func'
+    unset -f '_go_func' '__go_func'
+    ;;
+  cd|pushd)
+    "$cmd" "$_GO_ROOTDIR/$@"
+    ;;
+  *)
+    _GO_CMD='_go_func' "$_GO_SCRIPT" "$cmd" "$@"
+  esac
+}
+
+complete -o nospace -F __go_func _go_func

@@ -1,0 +1,86 @@
+#!/bin/bash
+#
+# prep
+#
+# A script to install prereqs and copy certificates to nodes in the k8s cluster
+#
+# Arguments - None
+#
+sourceconf "$CA_CONF"
+sourceconf "$PLATFORM_CONF"
+sourceconf "$K8S_CONF"
+
+function _prep() {
+
+    UNATTEND="0"
+    for i in "$@"
+       do
+        case $i in
+             -u)
+             UNATTEND="1"
+             ;;
+            "-n="*)
+            NODE="${i#*=}"
+            ;;
+            *)
+            # unknown option
+            ;;
+        esac
+    done
+
+    if [ "$NODE" == "" ]; then
+        RUN_NODES="$ALL_NODES"
+    else
+        RUN_NODES="$NODE"
+    fi
+
+    ret_init_inst "SPOT_INSTS"
+
+    if [ "$SPOT_INSTS" == "" ]; then
+        @go.log FATAL "No Noes running exiting"
+    fi
+    ret_init_ips "INST_STR" "$SPOT_INSTS" 1
+    if [ "$INST_STR" == "" ]; then
+        @go.log FATAL "No output from status: exiting"
+    fi
+
+    INST_STR=$(echo "$INST_STR"|tr ";" " ")
+
+    if [ "$UNATTEND" == "1" ]; then
+        @go.log WARN "We are automatically trusting all host keys due to UNATTEND being set"
+    else
+        read -e -p "Do you wish to automatically trust host keys provided? - Please understand the risks here: (Y/N): " -i "N" TRST
+        if [ "$TRST" != "Y" ]; then
+            @go.log FATAL "User choose not to accept SSH Keys - Exiting"
+        fi
+    fi
+
+    for NODE in $RUN_NODES; do
+        NODE_INST=""
+        for INST in $INST_STR; do
+            T=$(echo "$INT"|grep "$NODE")
+            if [ "$T" != "" ]; then
+                NODE_INST="$INST"
+            fi
+        done
+        EXT_IP=$(echo "$WN_INST"|cut -d"," -f4)
+
+        CHK=$(grep "$EXT_IP" ~/.ssh/known_hosts)
+        if [ "$CHK" == "" ]; then
+            ssh-keyscan $EXT_IP >> ~/.ssh/known_hosts
+            @go.log INFO "Trusting Key from $NODE - $EXT_IP"
+        else
+            @go.log INFO "$IP is already in known hosts - Skipping"
+        fi
+    done
+    if [ -d ./conf/k8s ]; then
+        @go.log FATAL "K8s conf directory already exists - exiting"
+    fi
+    mkdir ./conf/k8s
+    chmod -R 770 ./conf/k8s
+
+}
+
+
+_prep "$@"
+

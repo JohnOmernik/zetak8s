@@ -1,0 +1,100 @@
+#!/bin/bash
+#
+# This script walks the user through a series of questions in order to create a prep_conf.conf
+#
+# No arguments are called here
+
+sourceconf "$PLATFORM_CONF"
+. "$_GO_USE_MODULES" $PLATFORM
+echo ""
+echo "-----------------------------------"
+echo "This process will ask a series of questions in order to create a prep_conf.conf script for gettings nodes ready for Zeta"
+echo "The configuration will be located: $PREP_CONF"
+echo "-----------------------------------"
+echo ""
+GEN_KEY="Y"
+OUT_KEY="./conf/iuser.key"
+OUT_KEY_PUB="./conf/iuser.key.pub"
+echo ""
+echo "As part of this process, we will generate a key for the IUSER user"
+echo "It will be stored at $OUT_KEY and its public key will be stored at $OUT_KEY_PUB"
+echo "These values will be saved in the conf for use as well"
+echo ""
+IUSER_UID="2500"
+FSUSER_UID="2000"
+IUSER="zetaadm" # The Main User for Zeta
+FSUSER="mapr"   # The filesystem user for Zeta
+echo "We will create two users, one fore node to node setup, another for the filesystem"
+echo "By default these users are:
+echo "Initial User (IUSER): $IUSER - UID: $IUSER_UID"
+echo "FS User (FSUSER): $FSUSER - UID: $FSUSER_UID"
+echo ""
+echo "-----------------------------------"
+echo "We will not get passwords for the users"
+echo ""
+getpass "$IUSER" IUSER_PASS
+echo ""
+getpass "$FSUSER" FSUSER_PASS
+echo ""
+#echo "-----------------------------------"
+#echo "Please enter the list of nodes we will be preparing for Zeta, the nodes should be space separated"
+#echo ""
+#read -e -p "Enter list of space separated nodes for use in Zeta: " NODES
+#echo ""
+#echo "In setting up Zeta, we like to select an 'Initial' node that can be used as the node that all the scripts run from. It should be an agent node"
+#echo ""
+#read -e -p "Enter initial node for Zeta install: " INIT_NODE
+#echo ""
+#echo ""
+echo ""
+echo "-----------------------------------"
+echo "Privileged actions typically require sudo.  In a default install we need the $IUSER account to have sudo on all nodes"
+echo "This is not always possible in various environments, so we provide an option to replace sudo with a privileged command of your choice"
+echo "This maybe something like pbrun, instead of running sudo %cmd it would run pbrun %cmd"
+echo "This is where you can choose the privilege escalation method"
+echo ""
+read -e -p "Privilege Escalation command: " -i "sudo" PRIV_CMD
+
+
+touch $PREP_CONF
+chmod 640 $PREP_CONF
+
+cat > $PREP_CONF << EOF
+#!/bin/bash
+#
+# Configuration script for prepping nodes for Zeta Architecture
+
+# The Main user for Zeta  (zetaadm by default)
+IUSER="$IUSER"
+FSUSER="$FSUSER"
+# The Privilege Escalation command
+PRIV_CMD="$PRIV_CMD"
+# The following Variables determine whether to generate a key for IUSER, what that key will be called, and what the public key will be called
+GEN_KEY="$GEN_KEY"
+OUT_KEY="$OUT_KEY"
+OUT_KEY_PUB="$OUT_KEY_PUB"
+
+# The UIDs for IUSER and FSUSER
+IUSER_UID="$IUSER_UID"
+FSUSER_UID="$FSUSER_UID"
+
+# Passwords for FSUSER and IUSER
+FSUSER_PASS="$FSUSER_PASS"
+IUSER_PASS="$IUSER_PASS"
+
+# Node list to prep
+NODES="$NODES"
+
+# Initial Node to use for staging
+INIT_NODE="$INIT_NODE"
+
+# Interfaces to check for internal IPs (in order)
+INTERFACE_LIST="$INTERFACE_LIST"
+
+# If this is set to 1, scripts will assume "Use" when the conf exists.
+PREP_LOCKED="0"
+
+EOF
+
+@go.log INFO "Prep Conf file written to $PREP_CONF"
+

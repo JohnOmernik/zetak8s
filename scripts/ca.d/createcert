@@ -1,0 +1,223 @@
+#!/bin/bash
+
+#
+# Creates certificates in the local CA with cfssl 
+#
+
+sourceconf "$CA_CONF"
+function showusage() {
+
+    echo ""
+    echo "Usage for ./zeta ca createcert"
+    echo "------------------------------"
+    echo "-u                            Unattended mode - No prompts - Settings below marked with (u) are required parameters in unattended mode"
+    echo ""
+    echo "Note: Items without (u), if not provided with use CA Defaults (Warning will be displayed)"
+    echo ""
+    echo "-cn=\"Common name\"         (u) Common name  of requested certificate"
+    echo "-cncert=\"Cert cn\"         This is an optional item for when the actual cert cn field needs to be slightly different"
+    echo "-c=\"Country\"              Country of requested certificate"
+    echo "-st=\"State\"               State of requested certificate"
+    echo "-l=\"Location\"             Location (City)requested certificate"
+    echo "-o=\"Organization\"         Organization of requested certificate"
+    echo "-o=\"Organizational Unit\"  Organizational Unit of requested certificate"
+    echo "-h=\"hostnames\"            Hostnames (comma separated) for requested cert (optional, will default to none if not provided"
+    echo ""
+    echo "------------------------------"
+    echo ""
+
+}
+
+function _createcert(){
+    MYWD=$(pwd)
+    CERT_H=""
+    UNATTEND="0"
+    CERT_CN=""
+    CERT_CERTCN=""
+    CERT_C=""
+    CERT_ST=""
+    CERT_L=""
+    CERT_O=""
+    CERT_OU=""
+
+    for i in "$@"
+        do
+        case $i in
+            -u)
+            UNATTEND="1"
+            ;;
+            "-cn="*)
+            CERT_CN="${i#*=}"
+            ;;
+            "-cncert="*)
+            CERT_CERT_CN="${i#*=}"
+            ;;
+            "-c="*)
+            CERT_C="${i#*=}"
+            ;;
+            "-l="*)
+            CERT_L="${i#*=}"
+            ;;
+            "-o="*)
+            CERT_O="${i#*=}"
+            ;;
+            "-ou="*)
+            CERT_OU="${i#*=}"
+            ;;
+            "-h="*)
+            CERT_H="${i#*=}"
+            ;;
+            *)
+            # unknown option
+            ;;
+        esac
+    done
+
+    if [ ! -d "./conf/ca" ]; then
+        echo "CA not created please run ./zeta ca create ca"
+        exit 1
+    fi
+    showusage
+    if [ "$UNATTEND" == "1" ]; then
+        if [ "$CERT_CN" == "" ]; then
+            @go.log FATAL "Cannot do unattended mode with no cn passed in via -cn"
+        fi
+        if [ "$CERT_C" == "" ]; then
+            @go.log WARN "No Country provided with -c using CA default of $CA_DEFAULT_C"
+            CERT_C="$CA_DEFAULT_C"
+        fi
+        if [ "$CERT_ST" == "" ]; then
+            @go.log WARN "No State provided with -st using CA default of $CA_DEFAULT_ST"
+            CERT_ST="$CA_DEFAULT_ST"
+        fi
+        if [ "$CERT_L" == "" ]; then
+            @go.log WARN "No Location (city) provided with -l using CA default of $CA_DEFAULT_L"
+            CERT_L="$CA_DEFAULT_L"
+        fi
+        if [ "$CERT_O" == "" ]; then
+            @go.log WARN "No Organization provided with -o using CA default of $CA_DEFAULT_O"
+            CERT_O="$CA_DEFAULT_O"
+        fi
+        if [ "$CERT_OU" == "" ]; then
+            @go.log WARN "No Organizational Unit provided with -ou using CA default of $CA_DEFAULT_OU"
+            CERT_OU="$CA_DEFAULT_OU"
+        fi
+        if [ "$CERT_H" == "" ]; then
+            @go.log WARN "No Hostnames provided with -h Defaulting to no hostnames"
+        fi
+    else
+        read -e -p "What is the CN for this cert: " -i "$CERT_CN" CERT_CN
+
+        if [ "$CERT_C" == "" ]; then
+            CERT_C="$CA_DEFAULT_C"
+        fi
+        read -e -p "What is the Country (C) for this cert: " -i "$CERT_C" CERT_C
+
+        if [ "$CERT_ST" == "" ]; then
+            CERT_ST="$CA_DEFAULT_ST"
+        fi
+        read -e -p "What is the State (ST) for this cert: " -i "$CERT_ST" CERT_ST
+
+        if [ "$CERT_L" == "" ]; then
+            CERT_L="$CA_DEFAULT_L"
+        fi
+        read -e -p "What is the Location (L) for this cert: " -i "$CERT_L" CERT_L
+
+        if [ "$CERT_O" == "" ]; then
+            CERT_O="$CA_DEFAULT_O"
+        fi
+        read -e -p "What is the Organization (O) for this cert: " -i "$CERT_O" CERT_O
+
+        if [ "$CERT_OU" == "" ]; then
+            CERT_OU="$CA_DEFAULT_OU"
+        fi
+        read -e -p "What is the Organizational Unitn (OU) for this cert: " -i "$CERT_OU" CERT_OU
+
+        read -e -p "Please provide a comma separated list of hostnames (typically for web usage). Leave blank for none: " -i "$CERT_H" CERT_H
+    fi
+
+    if [ "$CERT_CERT_CN" == "" ]; then
+        CERT_CERT_CN="$CERT_CN"
+    fi
+    if [ -f ./conf/ca/certs/${CERT_CN}.pem ]; then
+        @go.log FATAL "There is already a certificate named ${CERT_CN}.pem located in ./conf/ca/certs - Exiting"
+    fi
+    if [ -f ./conf/ca/csrs/${CERT_CN}.csr ]; then
+        @go.log FATAL "There is already a csr named ${CERT_CN}.csr located in ./conf/ca/csrs - Exiting"
+    fi
+    if [ -f ./conf/ca/keys/${CERT_CN}-key.pem ]; then
+        @go.log FATAL "There is already a key named ${CERT_CN}-key.pem located in ./conf/ca/keys - Exiting"
+    fi
+    if [ -f ./conf/ca/csrs/${CERT_CN}-csr.json ]; then
+        @go.log FATAL "There is already a csr json named ${CERT_CN}-csr.json located in ./conf/ca/csrs - Exiting"
+    fi
+
+    echo ""
+    echo "-----------------------------------------------------------------"
+    echo "Creating Certificate for $CERT_CN"
+    echo "CN on Cert: $CERT_CERT_CN"
+    echo "-----------------------------------"
+    echo "Hostnames: $CERT_H"
+    echo ""
+    echo "Country (C):                $CERT_C"
+    echo "State (ST):                 $CERT_ST"
+    echo "Location (city) (L):        $CERT_L"
+    echo "Organization (O):           $CERT_O"
+    echo "Organizational Unit (OU):   $CERT_OU"
+    echo ""
+    echo "-----------------------------------------------------------------"
+    echo ""
+ 
+
+cat > ./conf/ca/csrs/${CERT_CN}-csr.json <<EOF
+{
+  "CN": "${CERT_CERT_CN}",
+  "key": {
+    "algo": "$CA_ALGO",
+    "size": $CA_KEYSIZE
+  },
+  "names": [
+    {
+      "C": "$CERT_C",
+      "L": "$CERT_L",
+      "O": "$CERT_O",
+      "OU": "$CERT_OU",
+      "ST": "$CERT_ST"
+    }
+  ]
+}
+EOF
+    cd ./conf/ca
+
+    if [ "$CERT_H" == "" ]; then
+        ../../bin/cfssl gencert \
+        -ca=ca.pem \
+        -ca-key=ca-key.pem \
+        -config=ca-config.json \
+        -profile=kubernetes \
+        ./csrs/${CERT_CN}-csr.json | ../../bin/cfssljson -bare $CERT_CN
+    else
+        ../../bin/cfssl gencert \
+        -ca=ca.pem \
+        -ca-key=ca-key.pem \
+        -config=ca-config.json \
+        -hostname=${CERT_H} \
+        -profile=kubernetes \
+        ./csrs/${CERT_CN}-csr.json | ../../bin/cfssljson -bare ${CERT_CN}
+    fi
+    CREATE="$?"
+    if [ "$CREATE" == "0" ]; then
+        @go.log INFO "Certificate created!"
+        mv ${CERT_CN}.pem ./certs &&  mv ${CERT_CN}-key.pem ./keys &&  mv ${CERT_CN}.csr ./csrs
+        cd $MYWD
+    else
+        cd $MYWD
+        @go.log FATAL "Certificate Creation failed"
+    fi
+
+
+}
+_createcert "$@"
+
+
+

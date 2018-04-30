@@ -1,0 +1,132 @@
+#!/bin/bash
+#
+# Determines prep status of a given node or all nodes via
+#
+# Arguments:
+# -n="%NODE% Get status of a specific node
+# No -n is like the old "-a" (all) it does it for all hosts
+#
+
+sourceconf "$PREP_CONF"
+
+function _displayhelp(){
+    echo "prep status - Provide a node prep status report by default it returns status on all nodes in prep.conf "
+    echo "===================================================================================================="
+    echo ""
+    echo "Arguments:"
+    echo "-h               - Display this help"
+    echo "-n=%NODE%        - Display status on the node %NODE%"
+    echo "-o               - Set SSH commands to NOT verify host (useful for initial clusters)"
+    echo ""
+    echo "Usage:"
+    echo "./zeta prep status                    # Display prep status for all nodes in prep.conf"
+    echo "./zeta prep status -n=\"192.168.0.1\" # Display prep status for the node 192.168.0.1"
+    echo ""
+}
+
+function _prep_status() {
+
+    ALL="1"
+    VERIFYHOST="1"
+    DISPLAYHELP="0"
+    for i in "$@"
+        do
+        case $i in
+            "-o")
+            VERIFYHOST="0"
+            ;;
+            -h)
+            DISPLAYHELP="1"
+            ;;
+            "-n="*)
+            HOST="${i#*=}"
+            ;;
+            *)
+            # unknown option
+            ;;
+        esac
+    done
+    if [ "$DISPLAYHELP" == "1" ]; then
+        _displayhelp
+        exit 0
+    fi
+
+
+    if [ "$HOST" != "" ]; then
+        ALL="0"
+    fi
+
+    if [ "$ALL" == "1" ]; then
+        MYHOSTS="$NODES"
+    else
+        MYHOSTS="$HOST"
+    fi
+
+    if [ "$MYHOSTS" == "" ]; then
+        @go.log FATAL "Must provide a host to connect and update status on via -n= or specify -a for all nodes"
+    fi
+
+    SCRIPTS="./bin/ubuntu_prep.sh ./bin/centos_prep1.sh ./bin/centos_prep2.sh"
+
+    FOUND="1"
+    for SCRIPT in $SCRIPTS; do
+        if [ ! -f "$SCRIPT" ]; then
+            FOUND="0"
+        fi
+    done
+    if [ "$FOUND" == "0" ]; then
+        @go.log INFO "System Scripts not found, creating in ./bin"
+        ./zeta prep createsystemprep -u
+    fi
+
+    if [ "$VERIFYHOST" == "0" ]; then
+        SSHOPT="-o StrictHostKeyChecking=no "
+    else
+        SSHOPT=""
+    fi
+
+    PREP_SCRIPT="./bin/prepstatus.sh"
+    REM_LOC="/home/$IUSER/prepstatus.sh"
+#printf "%-30s %-30s %-30s\n" "$PKG" "$PKGBASE" "$INST"
+
+    if [ ! -f "$PREP_SCRIPT" ]; then
+cat > $PREP_SCRIPT << EOF
+#!/bin/bash
+HNAME=\$(hostname)
+KERNEL=\$(uname -a|cut -d" " -f3)
+UP="true"
+PRIV_CHK=\$($PRIV_CMD whoami)
+SYS_TYPE=\$(/home/${IUSER}/system_type.sh)
+DCK_VERS=\$($PRIV_CMD docker info 2> /dev/null|grep "Server Version")
+EXT_IP=\$1
+
+printf "%-30s %-30s %-30s %-30s %-30s %-30s %-30s\n" "\$EXT_IP" "\$HNAME" "\$UP" "\$PRIV_CHK" "\$KERNEL" "\$SYS_TYPE" "\$DCK_VERS"
+
+EOF
+    chmod +x $PREP_SCRIPT
+    fi
+
+
+
+    printf "%-30s %-30s %-30s %-30s %-30s %-30s %-30s\n" "Ext IP" "Hostname" "Host Up" "Priv Check" "Kernel" "System Type" "Docker Version"
+    echo "----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------"
+    for HOST in $MYHOSTS; do
+
+        scp -q ${SSHOPT}-i ${OUT_KEY} ./bin/system_type.sh ${IUSER}@${HOST}:/home/${IUSER}/system_type.sh 2> /dev/null
+        scp -q ${SSHOPT}-i ${OUT_KEY} $PREP_SCRIPT ${IUSER}@${HOST}:$REM_LOC 2> /dev/null
+        if [ "$?" == "0" ]; then
+            ssh ${SSHOPT}-i ${OUT_KEY} ${IUSER}@${HOST} "$REM_LOC $HOST" 2> /dev/null
+        else
+            printf "%-30s %-30s %-30s %-30s %-30s %-30s %-30s\n" "$HOST" "false" "-" "-" "-" "-" "-"
+        fi
+    done
+    echo ""
+    echo ""
+    echo "To log into the initial node, please use:"
+    echo ""
+    echo "ssh -i $OUT_KEY ${IUSER}@$INIT_NODE"
+    echo ""
+
+}
+
+_prep_status "$@"

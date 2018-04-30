@@ -1,0 +1,27 @@
+#!/bin/bash
+
+#
+# Starts Nodes per the platform  conf
+##
+sourceconf "$PLATFORM_CONF"
+function _start_nodes(){
+
+    write_spec_json
+    if [ -f "./bin/init_output.json" ]; then
+        echo "There appears to be a init_output.json already, not doing anything"
+    else
+        INST_OUT=$(aws ec2 request-spot-instances --spot-price "$INIT_TEMP_PRICE" --instance-count $INIT_NUM_NODES --type "one-time" --launch-specification file://./bin/specification.json)
+
+        echo "$INST_OUT" > ./bin/init_output.json
+
+        ret_init_inst "SPOT_INSTS"
+
+        echo "Created Spot Requests $SPOT_INSTS"
+        echo "Results outputted to init_output.json"
+    fi
+
+}
+_start_nodes "$@"
+
+
+

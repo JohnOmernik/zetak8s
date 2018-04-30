@@ -1,0 +1,34 @@
+#!/bin/bash
+
+#
+# Checks status of nodes  Nodes per the platform  conf
+##
+
+sourceconf "$PLATFORM_CONF"
+
+function _status(){
+
+    test_plat
+
+    ret_init_inst "SPOT_INSTS"
+
+    if [ "$SPOT_INSTS" != "" ]; then
+        echo ""
+        echo "Checking the following SPOT_INSTS from ./bin/init_output.json"
+        echo "$SPOT_INSTS"
+        echo ""
+
+        ret_init_ips "INST_STR" "$SPOT_INSTS" 1
+    fi
+
+    if [ "$INST_STR" != "" ]; then
+        echo "Output Node string:"
+        echo "$INST_STR"
+    fi
+
+
+}
+_status "$@"
+
+
+

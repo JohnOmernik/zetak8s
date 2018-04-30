@@ -1,0 +1,105 @@
+#!/bin/bash
+#
+# Node prep install - Actually run both the user install and the system prep for Zeta
+#
+# Arguments:
+# -n=%NODE% Run the User and System install scripts on a specifc node (good for adding nodes at a later time)
+# -a Run the User and System install scripts on all nodes in the prep.conf
+# -u Run the scripts in unattended mode (don't wait for each host to complete before moving on)
+#
+# Usage examples:
+# ./zeta prep install -n=%NODE% # Run install scripts on specific nodes
+# ./zeta prep install -a # Run node prep on all nodes in prep.conf, but do so one at a time
+# ./zeta prep instlal -a -u # Run node prep on all nodes, but do in parallel and unattended.
+#
+sourceconf "$PREP_CONF"
+
+
+
+function _displayhelp(){
+    echo "prep install - Run the user and system install prep scripts on nodes for Zeta"
+    echo "===================================================================================================="
+    echo ""
+    echo "Arguments:"
+    echo "-u               - Unattended install - use default vers file of 1.0.0. if no vers passed to script (no user intervention)"
+    echo "-a               - All nodes - Run all nodes listed in prep.conf"
+    echo "-h               - Display this help"
+    echo "-n=%NODE%        - Run on the node %NODE%"
+    echo ""
+    echo "Usage:"
+    echo "./zeta prep install -a -u # Run install for user and system prep on all nodes without prompting for user intervention"
+    echo "./zeta prep install -n=\"192.168.0.1\" # Run the user and system install scripts on node 192.168.0.1"
+    echo ""
+}
+
+function _prepinstall() {
+
+    ALL="0"
+    UNATTEND="0"
+    DISPLAYHELP="0"
+    for i in "$@"
+    do
+    case $i in
+        -a)
+        ALL="1"
+        ;;
+        -u)
+        UNATTEND="1"
+        ;;
+        -h)
+        DISPLAYHELP="1"
+        ;;
+        "-n="*)
+        HOST="${i#*=}"
+        ;;
+        *)
+        ;;
+    esac
+    done
+
+    if [ "$DISPLAYHELP" == "1" ]; then
+        _displayhelp
+        exit 0
+    fi
+
+
+    if [ "$ALL" == "1" ]; then
+        RUN_NODES="$NODES"
+    else
+        # Add the Host to the list of nodes if it doesn't exist
+        addtoconfvar "$HOST" " " "NODES" "$PREP_CONF"
+        RUN_NODES="$HOST"
+    fi
+
+    INITSKIP="N"
+
+    for NODE in $RUN_NODES; do
+        if [ "$NODE" == "$INIT_NODE" ]; then
+            @go.log INFO "Skipping INIT_NODE ($INIT_NODE) to prep this node at the end of the run"
+            INITSKIP="Y"
+        else
+            ./zeta prep userprep -n="$NODE"
+            if [ "$UNATTEND" == "1" ]; then
+                ./zeta prep systemprep -n="$NODE" -u
+            else
+                ./zeta prep systemprep -n="$NODE"
+            fi
+        fi
+    done
+    if [ "$INITSKIP" == "Y" ]; then
+        @go.log INFO "Running on Skipped Init Node ($INIT_NODE)"
+        @go.log WARN "When this node is complete, it will likely lose the SSH Connection - This is normal - it's the node rebooting"
+        ./zeta prep userprep -n="$INIT_NODE"
+        if [ "$UNATTEND" == "1" ]; then
+            ./zeta prep systemprep -n="$INIT_NODE" -u
+        else
+            ./zeta prep systemprep -n="$INIT_NODE"
+        fi
+        echo ""
+        echo ""
+        @go.log INFO "To check prep install status please run $ ./zeta prep status"
+    fi
+}
+
+_prepinstall "$@"
+

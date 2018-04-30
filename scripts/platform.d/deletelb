@@ -1,0 +1,57 @@
+#!/bin/bash
+
+#
+# Delete an Establshed LB  a loadbalancer based on the provied information
+##
+sourceconf "$PLATFORM_CONF"
+sourceconf "K8S_CONF"
+function _deletelb(){
+ for i in "$@"
+        do
+        case $i in
+            -u)
+            UNATTEND="1"
+            ;;
+            *)
+            # unknown option
+            ;;
+        esac
+    done
+
+
+    if [ "$LBARN" == "" ]; then
+        @go.log FATAL "No LBARN defined in k8s.conf - exiting"
+    fi
+    if [ "$TGARN" == "" ]; then
+        @go.log FATAL "No TGARN defined in k8s.conf - exiting"
+    fi
+    
+    
+
+
+# To delete them
+    aws elbv2 delete-load-balancer --load-balancer-arn $LBARN
+
+    aws elbv2 delete-target-group --target-group-arn $TGARN
+
+echo "Load Balancer Deleted: "
+echo "-----------------------"
+echo "LB DNS: $LBDBS"
+echo "LB Arn: $LBARN"
+echo "Target Group Arn: $TGARN"
+echo "Listener Arn: $LISTENERARN"
+echo ""
+echo "This information will be removed from K8S Conf at $K8S_CONF"
+echo ""
+echo "-----------------------"
+
+sed -i "s/LBARN=.*//g" $K8S_CONF
+sed -i "s/TGARN=.*//g" $K8S_CONF
+sed -i "s/LISTENERARNARN=.*//g" $K8S_CONF
+sed -i "s/LBDNS=.*//g" $K8S_CONF
+
+}
+_deletelb "$@"
+
+
+

@@ -1,0 +1,77 @@
+#!/bin/bash
+
+#
+# Checks status of nodes  Nodes per the platform  conf
+##
+
+
+sourceconf "$CA_CONF"
+function _createca(){
+    MYWD=$(pwd)
+
+    if [ ! -f "./bin/cfssl" ]; then
+
+        echo "cfssl not downloaded - Downloading now"
+        wget -q --show-progress --https-only --timestamping https://pkg.cfssl.org/R1.2/cfssl_linux-amd64 https://pkg.cfssl.org/R1.2/cfssljson_linux-amd64
+        chmod +x cfssl_linux-amd64 cfssljson_linux-amd64
+        sudo mv cfssl_linux-amd64 ./bin/cfssl
+        sudo mv cfssljson_linux-amd64 ./bin/cfssljson
+    fi
+
+    if [ -d "./conf/ca" ]; then
+        echo "./conf/ca exists, will not overwrite. To create a new one, backup current ca and remove from this location"
+    else
+        mkdir ./conf/ca
+        mkdir ./conf/ca/csrs
+        mkdir ./conf/ca/certs
+        mkdir ./conf/ca/keys
+        chmod -R 700 ./conf/ca
+        cat > ./conf/ca/ca-config.json <<EOF
+{
+  "signing": {
+    "default": {
+      "expiry": "8760h"
+    },
+    "profiles": {
+      "kubernetes": {
+        "usages": ["signing", "key encipherment", "server auth", "client auth"],
+        "expiry": "8760h"
+      }
+    }
+  }
+}
+EOF
+
+cat > ./conf/ca/csrs/ca-csr.json <<EOF
+{
+  "CN": "$CA_CN",
+  "key": {
+    "algo": "$CA_ALGO",
+    "size": $CA_KEYSIZE
+  },
+  "names": [
+    {
+      "C": "$CA_C",
+      "L": "$CA_L",
+      "O": "$CA_O",
+      "OU": "$CA_OU",
+      "ST": "$CA_ST"
+    }
+  ]
+}
+EOF
+    cd ./conf/ca
+    echo "Running Init of CA"
+    ../../bin/cfssl gencert -initca ./csrs/ca-csr.json | ../../bin/cfssljson -bare ca
+    cd $MYWD
+
+
+    fi
+
+
+
+}
+_createca "$@"
+
+
+

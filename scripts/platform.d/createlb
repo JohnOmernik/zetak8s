@@ -1,0 +1,199 @@
+#!/bin/bash
+
+#
+# Craete a loadbalancer based on the provied information
+##
+sourceconf "$PLATFORM_CONF"
+sourceconf "$K8S_CONF"
+
+function _createlb(){
+ for i in "$@"
+        do
+        case $i in
+            -u)
+            UNATTEND="1"
+            ;;
+            "-n="*)
+            LB_NAME="${i#*=}"
+            ;;
+            "-t="*)
+            TARGET_INST="${i#*=}"
+            ;;
+            "-extprot="*)
+            EXT_LB_PROT="${i#*=}"
+            ;;
+            "-extport="*)
+            EXT_LB_PORT="${i#*=}"
+            ;;
+            "-intprot="*)
+            INT_LB_PROT="${i#*=}"
+            ;;
+            "-intport="*)
+            INT_LB_PORT="${i#*=}"
+            ;;
+            *)
+            # unknown option
+            ;;
+        esac
+    done
+
+    SNID=""
+    TGINSTS=""
+    for INST_ID in $(echo "$TARGET_INST"|tr "," " "); do
+        if [ "$TGINSTS" == "" ]; then
+            TGINSTS="Id=$INST_ID"
+        else
+            TGINSTS="$TGINSTS Id=$INST_ID"
+        fi
+        ret_subnet_instance_id "$INST_ID" "SNCHK"
+        ret_vpc_by_instance_id "$INST_ID" "VPCCHK"
+        if [ "$SNID" == "" ]; then
+            SNID="$SNCHK"
+        else
+            if [ "$SNID" != "$SNCHK" ]; then
+                @go.log FATAL "Instances provided not in the same subnet, will not create LB"
+            fi
+        fi
+    done
+
+    # Step one create the Load Balancer
+    CREATE_LB_RESULTS=$(aws elbv2 create-load-balancer --name $LB_NAME --type network --subnets $SNID)
+    LB_RES=$(echo "$CREATE_LB_RESULTS"|jq -r ".LoadBalancers[]|.LoadBalancerArn + \" \" + .DNSName + \" \" + .VpcId")
+    LBARN=$(echo "LB_RES"|cut -d" " -f1)
+    LBDNS=$(echo "LB_RES"|cut -d" " -f2)
+    LBVPC=$(echo "LB_RES"|cut -d" " -f3)
+
+
+#    aws elbv2 create-load-balancer --name funtime --type network --subnets subnet-a6281ce0
+# use DNS Name for Certificate
+#{
+#    "LoadBalancers": [
+#        {
+#            "State": {
+#                "Code": "provisioning"
+#            },
+#            "LoadBalancerArn": "arn:aws:elasticloadbalancing:us-west-2:793246819526:loadbalancer/net/funtime/4e0a1c01ddcc8d10",
+#            "CanonicalHostedZoneId": "Z18D5FSROUN65G",
+#            "IpAddressType": "ipv4",
+#            "LoadBalancerName": "funtime",
+#            "Scheme": "internet-facing",
+#            "VpcId": "vpc-ce58bbab",
+#            "DNSName": "funtime-4e0a1c01ddcc8d10.elb.us-west-2.amazonaws.com",
+#            "Type": "network",
+#            "AvailabilityZones": [
+#                {
+#                    "ZoneName": "us-west-2c",
+#                    "SubnetId": "subnet-a6281ce0"
+#                }
+#            ],
+#            "CreatedTime": "2018-04-29T21:10:29.040Z"
+#        }
+#    ]
+#}
+
+    # Create a Target group
+    CREATE_TG_RESULTS=$(aws elbv2 create-target-group --name ${LB_NAME}-targets --protocol $INT_LB_PROT --port $INT_LB_PORT --vpc-id $LBVPC)
+    TGARN=$(echo "$CREATE_TG_RESUTS"|jq -r ".TargetGroups[]|.TargetGroupArn")
+#   aws elbv2 create-target-group --name funtime-targets --protocol TCP --port 6443 --vpc-id vpc-ce58bbab
+#{
+#    "TargetGroups": [
+#        {
+#            "VpcId": "vpc-ce58bbab",
+#            "HealthCheckTimeoutSeconds": 10,
+#            "TargetGroupArn": "arn:aws:elasticloadbalancing:us-west-2:793246819526:targetgroup/funtime-targets/5a330318f40454b6",
+#            "HealthCheckProtocol": "TCP",
+#            "HealthCheckIntervalSeconds": 30,
+#            "UnhealthyThresholdCount": 3,
+#            "HealthCheckPort": "traffic-port",
+#            "Protocol": "TCP",
+#            "HealthyThresholdCount": 3,
+#            "Port": 6443,
+#            "TargetGroupName": "funtime-targets",
+#            "TargetType": "instance"
+#        }
+#    ]
+#}
+
+
+       CREATE_TG_INSTS_RESULTS=$(aws elbv2 register-targets --target-group-arn $TGARN --targets $TGINSTS)
+#        aws elbv2 register-targets --target-group-arn targetgroup-arn --targets Id=i-12345678 Id=i-23456789
+#        aws elbv2 register-targets --target-group-arn arn:aws:elasticloadbalancing:us-west-2:793246819526:targetgroup/funtime-targets/5a330318f40454b6 --targets Id=i-0750234a2b915ac66 Id=i-0d9119261fe98a5e6    
+#        Nooutput
+
+        CREATE_LB_LISTENER_RESULTS=$(aws elbv2 create-listener --load-balancer-arn $LBARN --protocol ${EXT_LB_PROT} --port ${EXT_LB_PORT}  --default-actions Type=forward,TargetGroupArn=$TGARN)
+#        aws elbv2 create-listener --load-balancer-arn $LB_ARN --protocol ${LB_PROT} --port ${LB_PORT}  --default-actions Type=forward,TargetGroupArn=$TARGET_ARN
+
+#        aws elbv2 create-listener --load-balancer-arn arn:aws:elasticloadbalancing:us-west-2:793246819526:loadbalancer/net/funtime/4e0a1c01ddcc8d10 --protocol TCP --port 6443 \
+#        --default-actions Type=forward,TargetGroupArn=arn:aws:elasticloadbalancing:us-west-2:793246819526:targetgroup/funtime-targets/5a330318f40454b6
+        LISTENERARN=$(echo "$CREATE_LB_LISTENER_RESUTS"|jq -r ".Listeners[]|.ListenerArn")
+
+#{
+#    "Listeners": [
+#        {
+#            "Protocol": "TCP",
+#            "DefaultActions": [
+#                {
+#                    "TargetGroupArn": "arn:aws:elasticloadbalancing:us-west-2:793246819526:targetgroup/funtime-targets/5a330318f40454b6",
+#                    "Type": "forward"
+#                }
+#            ],
+#            "Port": 6443,
+#            "ListenerArn": "arn:aws:elasticloadbalancing:us-west-2:793246819526:listener/net/funtime/4e0a1c01ddcc8d10/c832fb10db7325a2",
+#            "LoadBalancerArn": "arn:aws:elasticloadbalancing:us-west-2:793246819526:loadbalancer/net/funtime/4e0a1c01ddcc8d10"
+#        }
+#    ]
+#}
+# Get status
+
+#        aws elbv2 describe-target-health --target-group-arn arn:aws:elasticloadbalancing:us-west-2:793246819526:targetgroup/funtime-targets/5a330318f40454b6
+#
+#{
+#    "TargetHealthDescriptions": [
+#        {
+#            "TargetHealth": {
+#                "Description": "Initial health checks in progress",
+#                "State": "initial",
+#                "Reason": "Elb.InitialHealthChecking"
+#            },
+#            "Target": {
+#                "Port": 6443,
+#                "Id": "i-0750234a2b915ac66"
+#            }
+#        },
+#        {
+#            "TargetHealth": {
+#                "Description": "Initial health checks in progress",
+#                "State": "initial",
+#                "Reason": "Elb.InitialHealthChecking"
+#            },
+#            "Target": {
+#                "Port": 6443,
+#                "Id": "i-0d9119261fe98a5e6"
+#            }
+#        }
+#    ]
+#}
+
+
+
+echo "Load Balancer Created: "
+echo "-----------------------"
+echo "LB DNS: $LBDBS"
+echo "LB Arn: $LBARN"
+echo "Target Group Arn: $TGARN"
+echo "Listener Arn: $LISTENERARN"
+echo ""
+echo "This information written to K8S Conf at $K8S_CONF"
+echo ""
+echo "-----------------------"
+echo "LBARN=\"$LBARN\"" >> $K8S_CONF
+echo "TGARN=\"$TGARN\"" >> $K8S_CONF
+echo "LISTENERARN=\"$LISTENERARN\"" >> $K8S_CONF
+echo "LBDNS=\"$LBDNS\"" >> $K8S_CONF
+
+
+}
+_createlb "$@"
+
+
+

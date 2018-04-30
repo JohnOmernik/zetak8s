@@ -1,0 +1,137 @@
+#!/bin/bash
+#
+# Install K8s on Nodes in Zeta Cluster
+#
+# Arguments:
+# -u            # No prompt of user  Install on all nodes given dcos and prep conf files
+# -n=%NODE%     # Install on a specifc node. It will check to see if this node is a master or agent. If it's not a master, it will install the DCOS agent by default
+#
+# Usage:
+# ./zeta K8s install -n=node1      # Install K8s on the specified node given the config files. .
+# ./zeta K8s install               # no argument runs on all nodes but checks with user
+# ./zeta K8s install -u            # Run on all nodes, don't validate with user, just fire and forget
+#
+IP_DETECT="./conf/ip-detect"
+
+sourceconf "$PREP_CONF"
+sourceconf "$K8S_CONF"
+
+##################
+# We need to address this after we better understand K8s and pod networks
+# sourceconf "$NETWORK_CONF"
+#
+# if [ "$FW_FIRST_RUN" != "1" ]; then
+#    @go.log FATAL "Before Installing or Bootstrapping K8s, it's required to run the network firewall deploy via ./zeta network deployfw"
+# fi
+##################
+
+
+
+
+function _k8s_install() {
+    ALL="1"
+    UNATTEND="0"
+
+    for i in "$@"
+       do
+        case $i in
+             -u)
+             UNATTEND="1"
+             ;;
+            "-n="*)
+            HOST="${i#*=}"
+            ;;
+            *)
+            # unknown option
+            ;;
+        esac
+    done
+
+    if [ "$HOST" != "" ]; then
+        ALL="0"
+    fi
+
+    if [ "$ALL" == "1" ] && [ "$UNATTEND" == "0" ]; then
+        read -e -p "Run K8s install on nodes? (Y/N): " -i "N" INSTK8S
+        if [ "$INSTK8S" != "Y" ]; then
+            @go.log FATAL "User choose to cancel K8s Install"
+        fi
+    fi
+
+    if [ "$ALL" == "1" ]; then
+        RUN_NODES="$INTERNAL_NODES"
+    else
+        scp -o StrictHostKeyChecking=no $IP_DETECT $HOST:/tmp/ip-detect > /dev/null 2>&1
+        INTERNAL=$(ssh -o StrictHostKeyChecking=no $HOST "/tmp/ip-detect")
+        addtoconfvar "$INTERNAL" " " "INTERNAL_NODES" "$K8S_CONF"
+        addtoconfvar "$INTERNAL" " " "AGENT_NODES" "$K8S_CONF"
+
+        echo "You are looking to add the host: $HOST (Internal IP: $INTERNAL)"
+        echo "This node has already been added to the internal host list"
+        echo ""
+        sourceconf "$K8S_CONF"
+        RUN_NODES="$HOST"
+    fi
+
+
+
+
+    # First things first, we need to check if any the nodes that are coming through are master nodes. If it's all, there will obviously be master nodes there.
+    EXT_MASTERS=""
+    for NODE in $MASTER_NODES; do
+        @go.log WARN "Run Nodes: $RUN_NODES"
+        @go.log WARN "Node: $NODE"
+        if [[ "$RUN_NODES" == *"$NODE"* ]]; then
+            @go.log INFO "Initiating Master install on $NODE"
+            EXT_IP=$(ssh $NODE "curl -s icanhazip.com")
+            EXT_MASTERS="${EXT_MASTERS} $EXT_IP"
+            JOIN_STR_TMP=$(ssh $NODE "$PRIV_CMD kubeadm init --pod-network-cidr=$K8S_CIDR_POD"|grep "kubeadm join")
+        fi
+    done
+    @go.log INFO "Master Server Install(s) initiated on all master nodes"
+
+
+    @go.log INFO "Copying admin.conf"
+    ssh $EXT_MASTERS "$PRIV_CMD cp /etc/kubernetes/admin.conf /home/$IUSER/ && $PRIV_CMD chown $IUSER:$IUSER /home/$IUSER/admin.conf"
+    scp $EXT_MASTERS:/home/$IUSER/admin.conf ./conf/
+    ssh $EXT_MASTERS "rm /home/$IUSER/admin.conf"
+
+    @go.log INFO "Making init node a node to do stuff in K8s"
+    mkdir -p /home/$IUSER/.kube
+    cp /home/$IUSER/zetak8s/conf/admin.conf  /home/$IUSER/.kube/config
+    $PRIV_CMD chown $IUSER:$IUSER /home/$IUSER/.kube/config
+
+    echo ""
+    echo "Master Addresses:"
+    echo "$EXT_MASTERS"
+    echo ""
+    if [ "$JOIN_STR_TMP" != "" ]; then
+        JOIN_STR="$JOIN_STR_TMP"
+        echo "JOIN_STR=\"$JOIN_STR\"" >> $K8S_CONF
+    fi
+
+    @go.log INFO "Applying and upping our Pod Network"
+    $PRIV_CMD kubectl apply -f https://docs.projectcalico.org/v2.6/getting-started/kubernetes/installation/hosted/kubeadm/1.6/calico.yaml
+    sleep 2
+    echo "Installing nodes with $JOIN_STR"
+    sleep 10
+    @go.log INFO "Masters up and running starting Agent installs"
+
+    for NODE in $RUN_NODES; do
+        if [[ "$MASTER_NODES" != *"$NODE"* ]]; then
+            # This is an agent node so install now
+            @go.log INFO "Installing agent on $NODE"
+            ORES=$(ssh $NODE "$PRIV_CMD $JOIN_STR")
+            echo "$ORES"
+        fi
+    done
+    echo ""
+    @go.log INFO "K8s Agents Initiated on all Agents"
+    if [ "$ALL" != "1" ]; then
+        ./zeta k8s sshhosts -n="$HOST" -u
+    fi
+
+}
+
+_k8s_install "$@"
+

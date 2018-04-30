@@ -1,0 +1,148 @@
+#!/bin/bash
+#
+# This script walks the user through a series of questions in order to create a platform.conf
+#
+
+echo ""
+echo "-----------------------------------"
+echo "This process will ensure you are setup correctly for using platform specific provisioning  (if availabel) and values are stored in platform.conf"
+echo "The configuration will be located: $PLATFORM_CONF"
+echo "-----------------------------------"
+echo ""
+echo "Which platform will this zeta cluster be built on?"
+echo "Here is a list of available platform libraries:"
+echo ""
+ls ./scripts/lib/*platform|sed "s@\./scripts/lib/@@g"
+echo ""
+read -e -p "Please enter the platform lib choice: " PLATFORM
+
+echo "Loading Platform Modules"
+. "$_GO_USE_MODULES" $PLATFORM
+PLAT_CMD="$DEFAULT_PLAT_CMD"
+PLAT_VER="$PLAT_CMD $DEFAULT_PLAT_VER"
+
+echo "Initial User for Connection to Zeta Cluster"
+echo "We need access to the initial nodes on the Zeta cluster. We do this through a username that has passwordless sudo and a key without a password"
+echo ""
+echo "The suggested users come from the platform definition, but feel free to add or change if you know better"
+echo ""
+read -e -p "Initial user list to connect to zeta nodes: " -i "$DEFAULT_PLAT_USERS" INIT_USERS
+
+CURUSER=$(whoami)
+echo ""
+echo "We now need the key for the initial connection, this is typically location in /home/$CURUSER/.ssh/id_rsa, but doesn't have to be. Please specify that here"
+echo ""
+read -e -p "Private key for initial user on aws nodes: " -i "/home/$CURUSER/.ssh/id_rsa" INIT_KEY_LOC
+echo ""
+read -e -p "What does your platform call this key: " -i "id_rsa" INIT_KEY_NAME
+echo ""
+echo "-----------------------------------"
+echo "As we are prepping the nodes, it's helpful to have a list of interfaces to check for the internal IP Address of the nodes. "
+echo "Basically provide a space separated list, and the first interface in that list that returns an IP will be the lucky winner"
+echo ""
+read -e -p "Interface to check list: " -i "$DEFAULT_PLAT_NETWORK" INTERFACE_LIST
+
+
+echo "The Platform command for your choosen platform is: $PLAT_CMD, we will now check to see if we can run this"
+echo ""
+$PLAT_VER
+echo ""
+if [ "$?" != "0" ]; then
+    plat_install
+else
+    echo "Your platform command was found and returned a version. Please ensure you have embedded the appropriate authentication into the commmand to ensure proper opertion"
+fi
+
+
+echo "We will using the platform library: $PLATFORM - Now we are going to discuss provisioning of initial nodes"
+echo ""
+read -e -p "How many initial nodes (includes masters/workers): " -i "5" INIT_NUM_NODES
+echo ""
+read -e -p "How big do you want the OS Volume to be? (Size in GB): " -i "32" INIT_OS_SIZE
+echo ""
+read -e -p "How big do you want the Data Volumes to be? (Size in GB): " -i "8" INIT_DATA_SIZE
+echo ""
+read -e -p "How many data volumes do you want? " -i "3" INIT_NUM_DATA_VOL
+echo ""
+read -e -p "Please enter the Security group you wish to use: " INIT_SEC_GROUP
+echo ""
+read -e -p "Which instance size do you wish to use: " -i "$DEFAULT_INST_TYPE" INIT_INST_TYPE
+echo ""
+read -e -p "Which zone do you want to place these in: " -i "$DEFAULT_ZONE" INIT_ZONE
+echo ""
+read -e -p "Which image do you wish to use: " -i "$DEFAULT_IMG" INIT_IMG
+echo ""
+read -e -p "Some providers use temp nodes as a cheaper option (AWS uses spot requests) Do you wish to use these? (Y/N): " -i "Y" INIT_TEMP_REQ
+if [ "$INIT_TEMP_REQ" == "Y" ]; then
+    read -e -p "What price do you wish to use as your temp request offer? " -i "0.10" INIT_TEMP_PRICE
+else
+    INIT_TEMP_PRICE="0"
+fi
+echo ""
+
+
+INIT_NUM_NODES="$INIT_NUM_NODES"
+INIT_OS_SIZE="$INIT_OS_SIZE"
+INIT_DATA_SIZE="$INIT_DATA_SIZE"
+INIT_NUM_DATA_VOL="$INIT_NUM_DATA_VOL"
+INIT_SEC_GROUP="$INIT_SEC_GROUP"
+INIT_INST_TYPE="$INIT_INST_TYPE"
+INIT_ZONE="$INIT_ZONE"
+INIT_IMG="$INIT_IMG"
+INIT_TEMP_PRICE="$INIT_TEMP_PRICE"
+
+
+
+
+
+
+
+touch $PLATFORM_CONF
+chmod 640 $PLATFORM_CONF
+
+cat > $PLATFORM_CONF << EOF
+#!/bin/bash
+#
+# Configuration script for PLATFORM for Zeta Architecture
+
+# INIT_USER is the user to connect to the cluster in order to establish the initial users, and installs for Zeta
+INIT_USERS="$INIT_USERS"
+# INIT_KEY_LOC is the location of the SSH private key to connect to the cluster with
+INIT_KEY_LOC="$INIT_KEY_LOC"
+INIT_KEY_NAME="$INIT_KEY_NAME"
+#PLATFORM
+PLATFORM="$PLATFORM"
+. "\$_GO_USE_MODULES" \$PLATFORM
+# Interfaces to check for internal IPs (in order)
+INTERFACE_LIST="$INTERFACE_LIST"
+
+PLAT_CMD="$PLAT_CMD"
+PLAT_VER="$PLAT_VER"
+
+#INIT NODE INFO
+INIT_NUM_NODES="$INIT_NUM_NODES"
+INIT_OS_SIZE="$INIT_OS_SIZE"
+INIT_DATA_SIZE="$INIT_DATA_SIZE"
+INIT_NUM_DATA_VOL="$INIT_NUM_DATA_VOL"
+INIT_SEC_GROUP="$INIT_SEC_GROUP"
+INIT_INST_TYPE="$INIT_INST_TYPE"
+INIT_ZONE="$INIT_ZONE"
+INIT_IMG="$INIT_IMG"
+INIT_TEMP_PRICE="$INIT_TEMP_PRICE"
+
+
+#Nodes are ; sep, name,intip,extip,;name,initip,extip
+NODES=""
+
+
+
+
+# If this is set to 1, scripts will assume "Use" when the conf exists.
+PLATFORM_LOCKED="0"
+
+
+
+EOF
+
+@go.log INFO "Platform Conf file written to $PLATFORM_CONF"
+

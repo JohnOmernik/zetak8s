@@ -1,0 +1,54 @@
+#!/bin/bash
+#
+# Create conf file for initial K8s installation
+#
+
+echo ""
+echo "Gather Information about the CA for Secure Communication"
+echo "This information will be the info on the CA and the default provided for certifications as well"
+echo "---------------"
+read -e -p "Please enter the CA Country (C): " -i "US" CA_C
+echo ""
+read -e -p "Please enter the CA State (ST): " -i "WI" CA_ST
+echo ""
+read -e -p "Please enter the CA Location (L): " -i "Madison" CA_L
+echo ""
+read -e -p "Please enter the CA Organization (O): " -i "K8s" CA_O
+echo ""
+read -e -p "Please enter the CA Oranizational Unit (OU): " -i "CA" CA_OU
+echo ""
+read -e -p "Please enter the CA Common Name (CN): " -i "zetak8s" CA_CN
+echo ""
+CA_ALGO="rsa"
+CA_KEYSIZE="4096"
+echo ""
+
+CA_DEFAULT_C="$CA_C"
+CA_DEFAULT_ST="$CA_ST"
+CA_DEFAULT_L="$CA_L"
+CA_DEFAULT_O="$CA_O"
+CA_DEFAULT_OU="$CA_OU"
+
+cat > $CA_CONF << EOP
+#!/bin/bash
+
+#CA Default Information
+CA_DEFAULT_C="$CA_DEFAULT_C"
+CA_DEFAULT_ST="$CA_DEFAULT_ST"
+CA_DEFAULT_L="$CA_DEFAULT_L"
+CA_DEFAULT_O="$CA_DEFAULT_O"
+CA_DEFAULT_OU="$CA_DEFAULT_OU"
+
+#CA Information
+CA_C="$CA_C"
+CA_ST="$CA_ST"
+CA_L="$CA_L"
+CA_O="$CA_O"
+CA_OU="$CA_OU"
+CA_CN="$CA_CN"
+CA_ALGO="$CA_ALGO"
+CA_KEYSIZE="$CA_KEYSIZE"
+
+EOP
+
+

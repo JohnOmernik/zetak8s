@@ -1,0 +1,34 @@
+#!/bin/bash
+
+#
+# Pretty prints the prep_conf.conf file for examination
+#
+
+sourceconf "$PREP_CONF"
+
+function _prep_display(){
+    echo ""
+    echo "Initial User LIST: $INIT_USERS"
+    echo ""
+    echo "Initial Key Location: $INIT_KEY_LOC"
+    echo ""
+    echo "Key information for ${IUSER}"
+    echo "Private Key Location: $OUT_KEY"
+    echo "Public Key Location: $OUT_KEY_PUB"
+    echo ""
+    echo "UID for ${FSUSER}: $FSUSER_UID"
+    echo "UID For ${IUSER}: $IUSER_UID"
+    echo ""
+    echo "IUSER (Admin User): $IUSER"
+    echo "FSUSER (Filesystem user): $FSUSER"
+    echo "Passwords not displayed"
+    echo ""
+    echo "Initial Prep Node List: $NODES"
+    echo "Initial main node: $INIT_NODE"
+    echo ""
+    echo "Interface List: $INTERFACE_LIST"
+    echo ""
+    echo "prep.conf Lock status: $PREP_LOCKED"
+    echo ""
+}
+_prep_display "$@"

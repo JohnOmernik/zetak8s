@@ -1,0 +1,44 @@
+#!/bin/bash
+#
+# ca - Scripts to create a CA and issue certificates as needed
+#
+#
+
+sourceconf "$PLATFORM_CONF"
+function _ca() {
+
+    LOCK="0"
+
+    for i in "$@"
+    do
+    case $i in
+        -l)
+        LOCK="1"
+        ;;
+        *)
+            # unknown option
+        ;;
+    esac
+    done
+
+    initconf "$CA_CONF"
+
+    echo ""
+    echo "********************************"
+    echo ""
+    echo "Commands to use with ca:"
+    echo ""
+    echo "./zeta ca createca         # Create ca config "
+    echo ""
+    echo "./zeta ca -l                # Lock or unlock ca.conf file"
+    echo ""
+
+
+    if [ "$LOCK" == "1" ]; then
+       lockconf "$CA_CONF"
+    fi
+
+}
+
+_ca "$@"
+

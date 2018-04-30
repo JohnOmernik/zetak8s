@@ -1,0 +1,44 @@
+# No need for people cluster conf
+cluster.conf
+cluster.conf*
+**/cluster.conf
+**/cluster.conf*
+**/prep_conf.conf
+**/prep_conf.conf*
+
+# No bin data
+bin/*.sh
+bin/*
+bin/**
+bin/
+# No Conf Data
+conf/
+conf/*
+conf/**
+
+# No Temp data
+tmp/*.tmp
+
+clearcluster.sh
+
+
+# Any Key files should be ignored
+id_rsa
+id_rsa.pub
+**/*.pem
+**/id_rsa
+**/id_rsa.pub
+
+# Local Directories
+mapr_defaults/
+client_install/
+maprdocker/
+zkdocker/
+
+# Files specific to an installation
+ip_detect.sh
+
+hostlist.txt
+internal_hosts.txt
+out.prv
+out.prv.pub

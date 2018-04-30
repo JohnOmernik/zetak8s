@@ -1,0 +1,45 @@
+#!/bin/bash
+#
+# Theses scripts ensure your env is setup for a platform (cloud provider or on prem) and allow you to provision and deprovision servers from that platform if available
+#
+#
+# Check for the the conf and offer to create one
+# Arguments:
+#     -l|--lock        Lock the config so it no longer prompts if you want to use the existing config
+#
+
+function _platform() {
+
+    LOCK="0"
+
+    for i in "$@"
+    do
+    case $i in
+        -l|--lockconf)
+        LOCK="1"
+        ;;
+        *)
+            # unknown option
+        ;;
+    esac
+    done
+
+    initconf "$PLATFORM_CONF"
+
+    echo "Commands to use with platform:"
+    echo ""
+    echo ""
+    echo ""
+    echo "To lock or unlock the platform config:"
+    echo "./zeta platform -l"
+    echo ""
+    echo ""
+
+    if [ "$LOCK" == "1" ]; then
+       lockconf "$PLATFORM_CONF"
+    fi
+
+}
+
+_platform "$@"
+

@@ -1,0 +1,105 @@
+#!/bin/bash
+#
+# Create users on Zeta nodes for initial install
+#
+
+sourceconf "$PREP_CONF"
+
+
+function _displayhelp(){
+    echo "prep userprep - Creates base users for Zeta install on nodes"
+    echo "===================================================================================================="
+    echo ""
+    echo "Arguments:"
+    echo "-h               - Display this help"
+    echo "-n=%NODE%        - Run on the node %NODE%"
+    echo ""
+    echo "Usage:"
+    echo "./zeta prep userprep -n=\"192.168.0.1\" # Run the systemprep on node 192.168.0.1"
+    echo ""
+}
+
+
+function _userprep() {
+    DISPLAYHELP="0"
+    for i in "$@"
+        do
+        case $i in
+            "-n="*)
+            HOST="${i#*=}"
+            ;;
+            -h)
+            DISPLAYHELP="1"
+            ;;
+            *)
+            # unknown option
+            ;;
+        esac
+    done
+    if [ "$DISPLAYHELP" == "1" ]; then
+        _displayhelp
+        exit 0
+    fi
+
+    SCRIPTSRC="./conf/userupdate.sh"
+    if [ ! -f "$SCRIPTSRC" ]; then
+        @go.log INFO "User prep scripts not found, creating in .conf for security"
+        ./zeta prep createuserprep
+    fi
+
+    if [ ! -f "$OUT_KEY" ]; then
+        @go.log INFO "Prep conf exists, however, keys have not been generated, doing so now"
+        ./zeta prep genkey
+    fi
+
+    PUB_KEY=$(cat $OUT_KEY_PUB)
+    if [ "$HOST" == "" ]; then
+        @go.log FATAL "Host must not be blank, please specify with -n=%HOSTNAME%"
+    fi
+
+
+    REM_SCRIPT="/tmp/userupdate.sh"
+
+    @go.log INFO "Connecing to and updating host $HOST"
+    for USR in $INIT_USERS; do
+        OUTTEST=$(ssh -o StrictHostKeyChecking=no -i ${INIT_KEY_LOC} ${USR}@${HOST} hostname)
+            if [ "$OUTTEST" != "" ]; then
+                @go.log INFO "Using $USR for INIT_USER"
+                INIT_USER="$USR"
+                break
+            fi
+    done
+    if [ "$INIT_USER" == "" ]; then
+        @go.log FATAL "Could not determine initial user from this user list: $INIT_USERS - exiting"
+    fi
+    echo ""
+    echo "Copying User Update Script"
+    ssh -o StrictHostKeyChecking=no -i ${INIT_KEY_LOC} ${INIT_USER}@${HOST} "touch $REM_SCRIPT && chmod 700 $REM_SCRIPT"
+    scp -o StrictHostKeyChecking=no -i ${INIT_KEY_LOC} ${SCRIPTSRC} ${INIT_USER}@${HOST}:$REM_SCRIPT
+    echo "Running Script"
+    ssh -o StrictHostKeyChecking=no -t -i ${INIT_KEY_LOC} ${INIT_USER}@$HOST "chmod 700 $REM_SCRIPT && $PRIV_CMD $REM_SCRIPT"
+    echo "Removing Script"
+    ssh -o StrictHostKeyChecking=no -i ${INIT_KEY_LOC} ${INIT_USER}@$HOST "$PRIV_CMD rm $REM_SCRIPT"
+    echo "Updating Public Key for ${IUSER} user"
+    ssh -o StrictHostKeyChecking=no -i ${INIT_KEY_LOC} ${INIT_USER}@$HOST "$PRIV_CMD mkdir -p /home/${IUSER}/.ssh && echo \"$PUB_KEY\"|$PRIV_CMD tee -a /home/${IUSER}/.ssh/authorized_keys && $PRIV_CMD chown -R ${IUSER}:${IUSER} /home/${IUSER}/.ssh && $PRIV_CMD chmod 700 /home/${IUSER}/.ssh && $PRIV_CMD chmod 600 /home/${IUSER}/.ssh/authorized_keys"
+
+
+    if [ "$HOST" == "$INIT_NODE" ]; then
+        @go.log INFO "$HOST is the INIT_NODE for the cluster updating this node to have the private keys, as well as this repo under ${IUSER}"
+        echo "Trying to install git on initial host via apt-get install git - This may fail that's ok"
+        ssh -o StrictHostKeyChecking=no -i ${OUT_KEY} ${IUSER}@${HOST} "$PRIV_CMD apt-get update && $PRIV_CMD apt-get install -y git"
+        ssh -o StrictHostKeyChecking=no -i ${OUT_KEY} ${IUSER}@${HOST} "$PRIV_CMD yum install -y --assumeyes git"
+        echo ""
+        echo "Pulling this repo to the init node under /home/${IUSER}/zetak8s"
+        ssh -o StrictHostKeyChecking=no -i ${OUT_KEY} ${IUSER}@${HOST} "git clone https://github.com/JohnOmernik/zetak8s.git && mkdir -p ./zetak8s/conf && chmod 700 ./zetak8s/conf"
+        scp -o StrictHostKeyChecking=no -i ${OUT_KEY} ${OUT_KEY} ${IUSER}@${HOST}:/home/${IUSER}/.ssh/id_rsa
+        ssh -o StrictHostKeyChecking=no -i ${OUT_KEY} ${IUSER}@${HOST} "chmod 600 /home/${IUSER}/.ssh/id_rsa"
+        scp -o StrictHostKeyChecking=no -i ${OUT_KEY} $PREP_CONF ${IUSER}@${HOST}:/home/${IUSER}/zetak8s/conf/prep.conf
+        scp -o StrictHostKeyChecking=no -i ${OUT_KEY} ${OUT_KEY} ${IUSER}@${HOST}:/home/${IUSER}/zetak8s/conf/
+        scp -o StrictHostKeyChecking=no -i ${OUT_KEY} ${OUT_KEY_PUB} ${IUSER}@${HOST}:/home/${IUSER}/zetak8s/conf/
+
+    fi
+
+}
+
+_userprep "$@"

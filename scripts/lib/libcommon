@@ -1,0 +1,391 @@
+#!/bin/bash
+#
+# libcommon
+#
+# parseproxy - Parse the proxy variables into component pieces
+#
+# addtoconfvar - Take a new value and check a specific confvar if it exists, if it doesn't, remove it
+#
+# initconf - Load a conf and/or replace it. Used when the scripts assume a conf does not exist and needs to have it created
+#
+# sourceconf - Attempt to source a conf file, if the conf doesn't exist, exit with an error message
+#
+# lockconf - lock (or unlock) a give conf file
+#
+# checkapi - Check a given URL to determine if it's up and running. Keep trying until the number of fails is reached, then FATAL out
+#
+# getpass - Request a password from the User 
+#
+# getpaths - Provide a path, and return both the fuse path and the HDFS path in Zeta
+#
+# --------------------------------------------
+#
+#
+# function getpaths - Provide a path, and return both the HDFS and FUSE path (Either HDFS or FUSE can be provided)
+#
+# Arguments
+# $1 variable to put the FUSE Path in
+# $2 variable to put the HDFS Path in
+# $3 Path to work on
+#
+function getpaths() {
+
+    local RES_FUSE=$1
+    local RES_HDFS=$2
+    local DPATH=$3
+
+    FUSEPATH=""
+    HDFSPATH=""
+
+    CHK=$(echo "$DPATH"|grep "$CLUSTERMOUNT")
+    if [ "$CHK" != "" ]; then
+        @go.log INFO "$CLUSTERMOUNT found in DIR Path, assuming FUSE Path provided"
+        FUSEPATH="$DPATH"
+        HDFSPATH=$(echo "$DPATH"|sed "s@$CLUSTERMOUNT@@g")
+    else
+        @go.log INFO "$CLUSTERMOUNT not found in DIR Path, assuming HDFS Path provided"
+        FUSEPATH="${CLUSTERMOUNT}${DPATH}"
+        HDFSPATH="$DPATH"
+    fi
+
+    eval $RES_FUSE="'$FUSEPATH'"
+    eval $RES_HDFS="'$HDFSPATH'"
+
+}
+
+#
+# function parseproxy() - Take a proxy string are parse it into host, port, user, and password 
+#
+# Arguments
+# $1 - The proxy string
+# $2 The variable to put the host into
+# $3 The variable to put the port into
+# $4 The variable to put the username into
+# $5 The variable to put the password into
+#
+function parseproxy(){
+
+    PROXSTR=$1
+
+    local HOST_RESULT=$2
+    local PORT_RESULT=$3
+    local USER_RESULT=$4
+    local PASS_RESULT=$5
+
+
+    CREDS="0"
+    PROTO="http://"
+
+    if [[ $PROXSTR == "https"* ]]; then
+        PROTO="https://"
+    else
+        PROTO="http://"
+    fi
+
+    if [[ $PROXSTR == *"@"* ]]; then
+        CREDS="1"
+    else
+        CREDS="0"
+    fi
+
+    if [ "$CREDS" == "1" ]; then
+        USTR=$(echo "$PROXSTR"|cut -d"@" -f1|sed "s@$PROTO@@g")
+        P_USER=$(echo "$USTR"|cut -d":" -f1)
+        P_PASS=$(echo "$USTR"|cut -d":" -f2)
+        HOSTPORT=$(echo "$PROXSTR"|cut -d"@" -f2)
+    else
+        HOSTPORT=$(echo "$PROXSTR"|sed "s@$PROTO@@g")
+        P_USER=""
+        P_PASS=""
+    fi
+
+    P_HOST=$(echo "$HOSTPORT"|cut -d":" -f1)
+    P_PORT=$(echo "$HOSTPORT"|cut -d":" -f2)
+
+    eval $HOST_RESULT="'$P_HOST'"
+    eval $PORT_RESULT="'$P_PORT'"
+    eval $USER_RESULT="'$P_USER'"
+    eval $PASS_RESULT="'$P_PASS'"
+}
+
+
+
+#
+# function addtoconfvar
+#
+# Adds a value to a configuration file variable
+#
+# Arguments
+# $1 - the new value to add
+# $2 - Separator to use between values
+# $3 - The Variable name to add the new value to (no $)
+# $4 - The CONF File to search for the variable
+# $5 - Make changes without confirmation (Set this to 1 to be UNATTENDED)
+#
+function addtoconfvar(){
+
+    NEWVAL=$1
+    SEPARATOR=$2
+    CONF_VAR=$3
+    CONF_FILE=$4
+    UNATTEND=$5
+
+    VARLINE=$(cat $CONF_FILE|grep -v -P "^#"|grep "$CONF_VAR")
+    if [ "$VARLINE" == "" ]; then
+        @go.log WARN "Variables $CONF_VAR not found in $CONF_FILE - No changes made"
+    else
+        CHKVAL=$(echo "$VARLINE"|grep "$NEWVAL")
+        if [ "$CHKVAL" != "" ]; then
+            @go.log WARN "Value $NEWVAL already exists in $CONF_VAR in $CONF_FILE - No Changes Made"
+        else
+            CHKEMP=$(echo "$VARLINE"|grep '""')
+            if [ "$CHKEMP" == "" ]; then
+                NEWSTR="${SEPARATOR}${NEWVAL}"
+            else
+                NEWSTR="${NEWVAL}"
+            fi
+            NEWLINE=$(echo "$VARLINE"|sed -r "s/\"$/${NEWSTR}\"/g"|sed -r "s/ {2,}/ /g")
+            if [ "$UNATTEND" == "1" ]; then
+                REPLACE="Y"
+            else
+                echo "The old CONF line in $CONF_FILE is:"
+                echo ""
+                echo "$VARLINE"
+                echo ""
+                echo "The Replacement CONF line in $CONF_FILE proposed is:"
+                echo ""
+                echo "$NEWLINE"
+                echo ""
+                read -e -p "Do you wish to replace the old CONF line with the new in $CONF_FILE? (Y/N): " -i "N" REPLACE
+            fi
+            if [ "$REPLACE" == "Y" ]; then
+                @go.log INFO "Updating $CONF_FILE variable $CONF_VAR with $NEWVAL"
+                sed -i "s/.*$CONF_VAR.*/$NEWLINE/g" $CONF_FILE
+            fi
+        fi
+    fi
+}
+
+#
+# function initconf
+# This function is a simple tool that will look for a conf file, and if it's found and not locked, or not found, instead of exiting, will run through a conf creation process
+# If the conf is found, and locked, it will simply source the conf and move on
+#
+#  Logic: Check if a Conf Exists
+#   - If No Call the Conf Creation script
+#   - If Yes then offer the user three option: Replace the conf, Use the existing conf, or examine the conf
+#     - E (Examine) the conf displays the conf to the user and then provides only two options Use the conf or Replace the Conf
+#     - U (Use) the conf will source the conf and move forward
+#     - R Replace the conf will call the creation script and replace the conf in question with the results of the conf creation script
+#
+# There is one argument, the path to the conf.
+#
+
+
+function initconf(){
+
+    CUR_CONF="$1"
+    CONF_FILE=$(echo "$CUR_CONF"|sed "s@\./conf\/@@g")
+    CONF_CMD_BASE=$(echo "$CONF_FILE"|sed "s@\.conf@@g")
+    CONF_CMD=$(echo "$CONF_CMD_BASE"|sed "s/_/ /g")
+    CONF_VAR=$(echo "$CONF_CMD_BASE"|tr '[:lower:]' '[:upper:]')
+    CONF_VARNAME="${CONF_VAR}_LOCKED"
+
+    if [ -f "$CUR_CONF" ]; then
+        . $CUR_CONF
+        eval "CUR_LOCKED=\$${CONF_VARNAME}"
+        if [ "$CUR_LOCKED" != "1" ]; then
+            echo "There is a current $CONF_FILE file already in the conf folder"
+            echo "Do you wish to replace this $CONF_FILE?"
+            read -e -p "(R)eplace, (U)se, or (E)xamine $CONF_FILE? " -i "E" EXIST_PREP
+            if [ "$EXIST_PREP" == "E" ]; then
+                ./zeta $CONF_CMD display
+                echo ""
+                read -e -p "(R)eplace or (U)se existing $CONF_FILE? " -i "U" EXIST_PREP
+            fi
+       else
+            EXIST_PREP="U"
+       fi
+    else
+        EXIST_PREP="R"
+    fi
+
+    if [ "$EXIST_PREP" == "R" ]; then
+        ./zeta ${CONF_CMD} createconf
+    fi
+    . $CUR_CONF
+}
+
+#
+# function reqshared 
+#
+# Take a space separated list of shared services and determine if they have been installed, if not error out with a FATAL
+#
+#
+function reqshared() {
+    SHAREDREQS="$1"
+    for REQ in $SHAREDREQS; do
+        if [ ! -d "$CLUSTERMOUNT/zeta/shared/$REQ" ]; then
+            @go.log FATAL "Shared service $REQ is required for this service, please install"
+        fi
+    done
+}
+
+
+#
+# function sourceconf
+# Check to see if a conf exists and then source it. If it doesn't exist, exit with a message.
+#
+# Argument(s):
+# The path the conf file
+#
+function sourceconf(){
+    CUR_CONF="$1"
+    CONF_FILE=$(echo "$CUR_CONF"|sed "s@\./conf\/@@g")
+    CONF_CMD_BASE=$(echo "$CONF_FILE"|sed "s@\.conf@@g")
+    CONF_CMD=$(echo "$CONF_CMD_BASE"|sed "s/_/ /g")
+    CONF_VAR=$(echo "$CONF_CMD_BASE"|tr '[:lower:]' '[:upper:]')
+    CONF_VARNAME="${CONF_VAR}_LOCKED"
+
+    if [ -f "$CUR_CONF" ]; then
+        . $CUR_CONF
+    else
+        @go.log FATAL "The Conf file $CONF_FILE could not be found at $CUR_CONF. That file must be present before you can run this command"
+    fi
+}
+
+
+#
+# function lockconf
+#
+# Change the lock value of a given conf file
+#
+function lockconf(){
+
+
+    CUR_CONF="$1"
+    CONF_FILE=$(echo "$CUR_CONF"|sed "s@\./conf\/@@g")
+    CONF_CMD_BASE=$(echo "$CONF_FILE"|sed "s@\.conf@@g")
+    CONF_CMD=$(echo "$CONF_CMD_BASE"|sed "s/_/ /g")
+    CONF_VAR=$(echo "$CONF_CMD_BASE"|tr '[:lower:]' '[:upper:]')
+
+    CURVAR=$(grep "_LOCKED" $CUR_CONF|cut -d"=" -f1)
+    CURVAL=$(grep "_LOCKED" $CUR_CONF|cut -d"=" -f2|sed "s/\"//g")
+
+    echo ""
+    echo "Locking of conf files makes it so when you are running commands, zetago assumes that is the conf you want to use, instead of asking you to use it or replace it"
+    echo "Confs can be locked or unlocked at anytime via the %CONF%_LOCKED variable in each individual conf"
+    echo "For example, if the prep.conf conf was locked, there would be a PREP_LOCKED=\"1\" if it were unlocked it would be PREP_LOCKED=\"0\" (the default)"
+    echo ""
+
+    if [ "$CURVAL" == "1" ]; then
+        echo "Currently, $CUR_CONF is locked, do you wish to unlock it?"
+        read -e -p "Unlock $CUR_CONF? " -i "N" UNLOCK
+    elif [ "$CURVAL" == "0" ]; then
+        echo "Currently, $CUR_CONF is not locked, do you wish to lock it?"
+        read -e -p "Lock $CUR_CONF? " -i "N" LOCK
+    else
+        @go.log WARN "Unknown lock value for $CUR_CONF - $CURVAL"
+    fi
+
+    if [ "$UNLOCK" == "Y" ]; then
+        sed -i "s/$CURVAR=\"$CURVAL\"/$CURVAR=\"0\"/g" $CUR_CONF
+        @go.log INFO "Conf $CUR_CONF is now unlocked"
+    fi
+    if [ "$LOCK" == "Y" ]; then
+        sed -i "s/$CURVAR=\"$CURVAL\"/$CURVAR=\"1\"/g" $CUR_CONF
+        @go.log INFO "Conf $CUR_CONF is now locked"
+    fi
+
+}
+
+
+#
+# function checkapi
+#
+# Take an API to check for it being up.  Also take a number of times to check on 5 second loop. After that amount is reached, fail. Default is 10.
+#
+#
+function checkapi(){
+
+    API_URL=$1
+    CHK_CNT=$2
+    SKIP_HTTPS=$3
+    if [ "$SKIP_HTTPS" == "1" ]; then
+        CARGS="-s -k"
+    else
+        CARGS="-s"
+    fi
+    if [ "$CHK_CNT" == "" ]; then
+        CHK_CNT=10
+    fi
+
+    @go.log INFO "Waiting for API Respond at $API_URL"
+    TESTOUT=""
+    TESTOUT=$(curl $CARGS ${API_URL})
+    TESTCNT=1
+
+    while [ "$TESTOUT" == "" ]; do
+        @go.log INFO "No response at $API_URL - Test $TESTCNT out of $CHK_CNT - Waiting 5 seconds"
+        if [ "$TESTCNT" -ge "$CHK_CNT" ]; then
+            @go.log WARN "$CHK_CNT tests reached, you can reset the counter to 0 and wait, or you can fail here"
+            read -e -p "Do you wish to reset the test counter to 1? (Y/N): " -i "Y" TRESET
+            if [ "$TRESET" == "Y" ]; then
+                TESTCNT=1
+            else
+                @go.log FATAL "Waiting $CHK_CNT times for API: $API_URL - Exiting and failing"
+            fi
+        fi
+        sleep 5
+        TESTOUT=$(curl -s ${API_URL})
+        TESTCNT=$(( $TESTCNT + 1 ))
+    done
+    @go.log INFO "API Check of $API_URL - Succeeded!"
+
+
+
+}
+
+#
+# This script has a function to return a password.
+# It works with the user to get the password at the STDIN (hiding the input)
+# It then checks again to see if the passwords match. If they match,  it returns
+# If it doesn't match it tries again
+#
+#
+# getpass USER PASSVAR
+#
+# Asks a user to enter the password for a specific user
+#
+# - USER is the username the function is asking the password for. This is only a string representation, and is displayed in prompts
+# - PASSVA is the variable that function should store the password in so it's returned to the caller
+function getpass(){
+    local MYUSER=$1
+    local RESULT=$2
+
+    local MYPASS1="1234"
+    local MYPASS2="2345"
+
+    # If the passwords don't match, keep asking for passwords until they do
+    while [ "$MYPASS1" != "$MYPASS2" ]; 
+    do
+        stty -echo
+        printf "Please enter password for $MYUSER: "
+        read MYPASS1
+        echo ""
+        printf "Please re-enter password for $MYUSER: "
+        read MYPASS2
+        echo ""
+        stty echo
+        if [ "$MYPASS1" != "$MYPASS2" ]; then
+            echo ""
+            echo "Passwords entered for $MYUSER do not match! Please try again"
+            echo ""
+        fi
+    done
+    eval $RESULT="'$MYPASS1'"
+
+
+
+}
+

@@ -1,0 +1,47 @@
+#!/bin/bash
+#
+# Zeta Main Script
+#
+
+declare -r __GO_CORE="${0%/*}/scripts/go-script-bash/go-core.bash"
+
+if [ ! -d "./conf" ]; then
+    mkdir -p ./conf
+    chmod 700 ./conf
+fi
+
+BASE_CONF="./conf/base.conf"
+
+if [ ! -f "$BASE_CONF" ]; then
+    echo "Creating Initial Confing in $BASE_CONF"
+cat > $BASE_CONF << EOF
+#!/bin/bash
+export PLATFORM_CONF="./conf/platform.conf"
+export CA_CONF="./conf/ca.conf"
+export PREP_CONF="./conf/prep.conf"
+export K8S_CONF="./conf/k8s.conf"
+export FS_CONF="./conf/fs.conf"
+export CLUSTER_CONF="./conf/cluster.conf"
+export CLUSTER_ZETACA_CONF="./conf/cluster_zetaca.conf"
+export CLUSTER_BASE_CONF="./conf/cluster_base.conf"
+export PACKAGE_CONF="./conf/package.conf"
+export NETWORK_CONF="./conf/network.conf"
+export NODE_CONF="./conf/node.conf"
+export ROLE_CONF="./conf/role.conf"
+export ZK_CONF="./conf/zk.conf"
+EOF
+fi
+. $BASE_CONF
+
+if [[ ! -f "$__GO_CORE" ]]; then
+  git submodule update --init
+fi
+. "$__GO_CORE" "scripts"
+. "$_GO_USE_MODULES" 'log'
+. "$_GO_USE_MODULES" 'libcommon'
+. "$_GO_USE_MODULES" 'libnetwork'
+
+@go "$@"
+
+
+
