@@ -43,8 +43,8 @@ function _term_nodes(){
                     EIP=$(echo "$MYINST"|cut -d"," -f4)
 
                     echo "Canceling Spot Request for $SID which is instance $IID running on $IIP/$EIP"
-                    ${AWS_CMD} ec2 cancel-spot-instance-requests --spot-instance-request-ids $SID
-                    ${AWS_CMD} ec2 terminate-instances --instance-ids $IID
+                    ${PLAT_CMD} ec2 cancel-spot-instance-requests --spot-instance-request-ids $SID
+                    ${PLAT_CMD} ec2 terminate-instances --instance-ids $IID
                 done
                 echo ""
                 echo "Removing ./bin/${INST}_init_output.json"

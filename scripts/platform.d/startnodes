@@ -9,13 +9,13 @@ sourceconf "$PLATFORM_CONF"
 function _start_nodes(){
 
     echo "Setting the Default region"
-    ${AWS_CMD} configure set region ${INIT_REGION}
+    ${PLAT_CMD} configure set region ${INIT_REGION}
     echo "Setting up the masters"
     write_spec_json "master"
     if [ -f "./bin/master_init_output.json" ]; then
         echo "There appears to be a master_init_output.json already, not doing anything"
     else
-        MASTER_INST_OUT=$(${AWS_CMD} ec2 request-spot-instances --spot-price "$INIT_TEMP_MASTER_PRICE" --instance-count $INIT_MASTER_NUM_NODES --type "one-time" --launch-specification file://./bin/master_specification.json)
+        MASTER_INST_OUT=$(${PLAT_CMD} ec2 request-spot-instances --spot-price "$INIT_TEMP_MASTER_PRICE" --instance-count $INIT_MASTER_NUM_NODES --type "one-time" --launch-specification file://./bin/master_specification.json)
         echo "$MASTER_INST_OUT" > ./bin/master_init_output.json
         ret_init_inst "master" "MASTER_SPOT_INSTS"
         echo "Created Spot Requests $MASTER_SPOT_INSTS"
@@ -27,7 +27,7 @@ function _start_nodes(){
     if [ -f "./bin/worker_init_output.json" ]; then
         echo "There appears to be a worker_init_output.json already, not doing anything"
     else
-        WORKER_INST_OUT=$(${AWS_CMD} ec2 request-spot-instances --spot-price "$INIT_TEMP_WORKER_PRICE" --instance-count $INIT_WORKER_NUM_NODES --type "one-time" --launch-specification file://./bin/worker_specification.json)
+        WORKER_INST_OUT=$(${PLAT_CMD} ec2 request-spot-instances --spot-price "$INIT_TEMP_WORKER_PRICE" --instance-count $INIT_WORKER_NUM_NODES --type "one-time" --launch-specification file://./bin/worker_specification.json)
         echo "$WORKER_INST_OUT" > ./bin/worker_init_output.json
         ret_init_inst "worker" "WORKER_SPOT_INSTS"
         echo "Created Spot Requests $WORKER_SPOT_INSTS"
