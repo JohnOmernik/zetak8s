@@ -131,7 +131,8 @@ CA_OU="$CA_OU"
 CA_CN="$CA_CN"
 CA_ALGO="$CA_ALGO"
 CA_KEYSIZE="$CA_KEYSIZE"
-
+# If this is set to 1, scripts will assume "Use" when the conf exists.
+CA_LOCKED="0"
 EOP
 
 }
