@@ -12,6 +12,7 @@ function _platformcreateconf() {
     DEF_INIT_KEY_NAME="id_rsa"
 
     UNATTEND="0"
+
     for i in "$@"
     do
     case $i in
@@ -237,7 +238,7 @@ function _platformcreateconf() {
             INIT_TEMP_MASTER_PRICE="0"
             INIT_TEMP_WORKER_PRICE="0"
         fi
-
+    fi
 
     touch $PLATFORM_CONF
     chmod 640 $PLATFORM_CONF
