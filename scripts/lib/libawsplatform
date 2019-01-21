@@ -46,7 +46,7 @@ function plat_install(){
 function delete_network_lb(){
     local LB_ARN=$1
     local RESULT=$2
-    DELETE_LB_RESULT=$(${AWS_CMD} elbv2 delete-load-balancer --load-balancer-arn $LB_ARN)
+    DELETE_LB_RESULT=$(${PLAT_CMD} elbv2 delete-load-balancer --load-balancer-arn $LB_ARN)
     if [ "$?" == "0" ]; then
         MYRESULT="0"
     else
@@ -63,7 +63,7 @@ function delete_network_lb(){
 function delete_network_lb_tg(){
     local TG_ARN=$1
     local RESULT=$2
-    DELETE_LB_TG_RESULT=$(${AWS_CMD} elbv2 delete-target-group --target-group-arn $TG_ARN)
+    DELETE_LB_TG_RESULT=$(${PLAT_CMD} elbv2 delete-target-group --target-group-arn $TG_ARN)
     if [ "$?" == "0" ]; then
         MYRESULT="0"
     else
@@ -87,7 +87,7 @@ function create_network_lb_listener(){
     local RESULT=$6
 
     echo "Registering Listener for LB $LB_ARN on $LB_PROT - $LB_PORT for Target Group $TG_ARN"
-    CREATE_LB_LISTENER_RESULTS=$(${AWS_CMD} elbv2 create-listener --load-balancer-arn $LB_ARN --protocol ${LB_PROT} --port ${LB_PORT}  --default-actions Type=forward,TargetGroupArn=$TG_ARN)
+    CREATE_LB_LISTENER_RESULTS=$(${PLAT_CMD} elbv2 create-listener --load-balancer-arn $LB_ARN --protocol ${LB_PROT} --port ${LB_PORT}  --default-actions Type=forward,TargetGroupArn=$TG_ARN)
     if [ "$?" == "0" ]; then
         MYRESULT="0"
         LISTENERARN=$(echo "$CREATE_LB_LISTENER_RESULTS"|jq -r ".Listeners[]|.ListenerArn")
@@ -113,7 +113,7 @@ function register_lb_targets(){
 
     echo ""
     echo "Registering targets $TG_INSTS in Target Group $TG_ARN"
-    CREATE_TG_INSTS_RESULTS=$(${AWS_CMD} elbv2 register-targets --target-group-arn $TG_ARN --targets $TG_INSTS)
+    CREATE_TG_INSTS_RESULTS=$(${PLAT_CMD} elbv2 register-targets --target-group-arn $TG_ARN --targets $TG_INSTS)
     if [ "$?" == "0" ]; then
         MYRESULT="0"
     else
@@ -139,7 +139,7 @@ function create_network_lb_targetgroup(){
 
  # Create a Target group
     echo "Creating Target group for ${LB_NAME}-targets protocol: $LB_PROT port $LB_PORT on VPC $LB_VPC"
-    CREATE_TG_RESULTS=$(${AWS_CMD} elbv2 create-target-group --name $LB_NAME-targets --protocol $LB_PROT --port $LB_PORT --vpc-id $LB_VPC)
+    CREATE_TG_RESULTS=$(${PLAT_CMD} elbv2 create-target-group --name $LB_NAME-targets --protocol $LB_PROT --port $LB_PORT --vpc-id $LB_VPC)
     if [ "$?" == "0" ]; then
         MYRESULT="0"
         TGARN=$(echo "$CREATE_TG_RESULTS"|jq -r ".TargetGroups[]|.TargetGroupArn")
@@ -181,7 +181,7 @@ function create_network_lb(){
     local LB_VPC=$5
     local RESULT=$6
     echo "Creating LB $LB_NAME in subnet $SNID"
-    CREATE_LB_RESULTS=$(${AWS_CMD} elbv2 create-load-balancer --name $LB_NAME --type network --subnets $LB_SNID)
+    CREATE_LB_RESULTS=$(${PLAT_CMD} elbv2 create-load-balancer --name $LB_NAME --type network --subnets $LB_SNID)
     if [ "$?" == "0" ]; then
         MYRESULT="0"
         LB_RES=$(echo "$CREATE_LB_RESULTS"|jq -r ".LoadBalancers[]|.LoadBalancerArn + \" \" + .DNSName + \" \" + .VpcId")
@@ -258,7 +258,7 @@ function ret_instance_data_by_internal_ip(){
     local IP=$1
     local IID=$2
     local SID=$3
-    INSTS=$(${AWS_CMD} ec2 describe-instances)
+    INSTS=$(${PLAT_CMD} ec2 describe-instances)
     INST_DATA=$(echo "$INSTS"|jq -r ".Reservations[]|.Instances[]|.InstanceId + \"~\" + .SpotInstanceRequestId + \"~\" + .PrivateIpAddress + \"~\" + .PublicIpAddress + \"~\" + .SubnetId")
     OUTSUB=""
     OUTINST=""
@@ -282,7 +282,7 @@ function ret_init_ips() {
     local NOOUTPUT=$3
 
 
-    INSTS=$(${AWS_CMD} ec2 describe-instances)
+    INSTS=$(${PLAT_CMD} ec2 describe-instances)
     INST_DATA=$(echo "$INSTS"|jq -r ".Reservations[]|.Instances[]|.InstanceId + \" \" + .SpotInstanceRequestId + \" \" + .PrivateIpAddress + \" \" + .PublicIpAddress")
 
         #Nodes are ; sep, instid,spotid,intip,extip,hname;instid,spotid,initip,extip,hname
