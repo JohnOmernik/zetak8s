@@ -1,5 +1,16 @@
 #!/bin/bash
 
+echo ""
+echo "*******************************************************"
+echo ""
+echo "This script only works if you've gone ahead and selected the platform.conf items by running ./zeta platform"
+echo ""
+echo "It also makes a number of assumptions"
+
+
+
+
+
 
 echo "Creating CA Conf and defaults"
 

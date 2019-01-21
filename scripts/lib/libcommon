@@ -185,6 +185,7 @@ function addtoconfvar(){
 function initconf(){
 
     CUR_CONF="$1"
+    MYARGS="$@"
     UNATTEND="$2"
     CONF_FILE=$(echo "$CUR_CONF"|sed "s@\./conf\/@@g")
     CONF_CMD_BASE=$(echo "$CONF_FILE"|sed "s@\.conf@@g")
@@ -212,7 +213,7 @@ function initconf(){
     fi
 
     if [ "$EXIST_PREP" == "R" ]; then
-        ./zeta ${CONF_CMD} createconf $UNATTEND
+        ./zeta ${CONF_CMD} createconf $@
     fi
     . $CUR_CONF
 }

@@ -3,96 +3,244 @@
 # This script walks the user through a series of questions in order to create a platform.conf
 #
 
-echo ""
-echo "-----------------------------------"
-echo "This process will ensure you are setup correctly for using platform specific provisioning  (if availabel) and values are stored in platform.conf"
-echo "The configuration will be located: $PLATFORM_CONF"
-echo "-----------------------------------"
-echo ""
-echo "Which platform will this zeta cluster be built on?"
-echo "Here is a list of available platform libraries:"
-echo ""
-ls ./scripts/lib/*platform|sed "s@\./scripts/lib/@@g"
-echo ""
-read -e -p "Please enter the platform lib choice: " PLATFORM
 
-echo "Loading Platform Modules"
-. "$_GO_USE_MODULES" $PLATFORM
-PLAT_CMD="$DEFAULT_PLAT_CMD"
-PLAT_VER="$PLAT_CMD $DEFAULT_PLAT_VER"
+function _platformcreateconf() {
+    CURUSER=$(whoami)
 
-echo "Initial User for Connection to Zeta Cluster"
-echo "We need access to the initial nodes on the Zeta cluster. We do this through a username that has passwordless sudo and a key without a password"
-echo ""
-echo "The suggested users come from the platform definition, but feel free to add or change if you know better"
-echo ""
-read -e -p "Initial user list to connect to zeta nodes: " -i "$DEFAULT_PLAT_USERS" INIT_USERS
+    DEF_PLATFORM="libawsplatform"
+    DEF_INIT_KEY_LOC="/home/$CURUSER/.ssh/id_rsa"
+    DEF_INIT_KEY_NAME="id_rsa"
 
-CURUSER=$(whoami)
-echo ""
-echo "We now need the key for the initial connection, this is typically location in /home/$CURUSER/.ssh/id_rsa, but doesn't have to be. Please specify that here"
-echo ""
-read -e -p "Private key for initial user on aws nodes: " -i "/home/$CURUSER/.ssh/id_rsa" INIT_KEY_LOC
-echo ""
-read -e -p "What does your platform call this key: " -i "id_rsa" INIT_KEY_NAME
-echo ""
-echo "-----------------------------------"
-echo "As we are prepping the nodes, it's helpful to have a list of interfaces to check for the internal IP Address of the nodes. "
-echo "Basically provide a space separated list, and the first interface in that list that returns an IP will be the lucky winner"
-echo ""
-read -e -p "Interface to check list: " -i "$DEFAULT_PLAT_NETWORK" INTERFACE_LIST
+    UNATTEND="0"
+    for i in "$@"
+    do
+    case $i in
+        -u)
+        UNATTEND="1"
+        ;;
+        "-p="*)
+        T_PLATFORM="${i#*=}"
+        ;;
+        "-pc="*)
+        T_PLAT_CMD="${i#*=}"
+        ;;
+        "-iu="*)
+        T_INIT_USERS="${i#*=}"
+        ;;
+        "-kl="*)
+        T_INIT_KEY_LOC="${i#*=}"
+        ;;
+        "-kn="*)
+        T_INIT_KEY_NAME="${i#*=}"
+        ;;
+        "-il="*)
+        T_INTERFACE_LIST="${i#*=}"
+        ;;
+        "-mnn="*)
+        T_INIT_MASTER_NUM_NODES="${i#*=}"
+        ;;
+        "-mos="*)
+        T_INIT_MASTER_OS_SIZE="${i#*=}"
+        ;;
+        "-wos="*)
+        T_INIT_WORKER_OS_SIZE="${i#*=}"
+        ;;
+        "-ds="*)
+        T_INIT_DATA_SIZE="${i#*=}"
+        ;;
+        "-ndv="*)
+        T_INIT_NUM_DATA_VOL="${i#*=}"
+        ;;
+        "-imt="*)
+        T_INIT_INST_MASTER_TYPE="${i#*=}"
+        ;;
+        "-iwt="*)
+        T_INIT_INST_WORKER_TYPE="${i#*=}"
+        ;;
+        "-z="*)
+        T_INIT_ZONE="${i#*=}"
+        ;;
+        "-r="*)
+        T_INIT_REGION="${i#*=}"
+        ;;
+        "-i="*)
+        T_INIT_IMG="${i#*=}"
+        ;;
+        "-sg="*)
+        T_INIT_SEC_GROUP="${i#*=}"
+        ;;
+        "-tmp="*)
+        T_INIT_TEMP_MASTER_PRICE="${i#*=}"
+        ;;
+        "-twp="*)
+        T_INIT_TEMP_WORKER_PRICE="${i#*=}"
+        ;;
 
+        *)
+    esac
+    done
 
-echo "The Platform command for your choosen platform is: $PLAT_CMD, we will now check to see if we can run this"
-echo ""
-$PLAT_VER
-echo ""
-if [ "$?" != "0" ]; then
-    plat_install
-else
-    echo "Your platform command was found and returned a version. Please ensure you have embedded the appropriate authentication into the commmand to ensure proper opertion"
-fi
-
-
-echo "We will using the platform library: $PLATFORM - Now we are going to discuss provisioning of initial nodes"
-echo ""
-read -e -p "How many initial nodes (masters): " -i "3" INIT_MASTER_NUM_NODES
-echo ""
-read -e -p "How many initial nodes (workers): " -i "7" INIT_WORKER_NUM_NODES
-echo ""
-read -e -p "How big do you want the OS Volume to be (Masters)? (Size in GB): " -i "100" INIT_MASTER_OS_SIZE
-echo ""
-read -e -p "How big do you want the OS Volume to be (Workers)? (Size in GB): " -i "750" INIT_WORKER_OS_SIZE
-echo ""
-read -e -p "How big do you want the Data Volumes to be? (Size in GB): " -i "16" INIT_DATA_SIZE
-echo ""
-read -e -p "How many data volumes do you want? " -i "3" INIT_NUM_DATA_VOL
-echo ""
-read -e -p "Please enter the Security group you wish to use: " INIT_SEC_GROUP
-echo ""
-read -e -p "Which instance size do you wish to use for masters: " -i "$DEFAULT_INST_MASTER_TYPE" INIT_INST_MASTER_TYPE
-echo ""
-read -e -p "Which instance size do you wish to use for workers: " -i "$DEFAULT_INST_WORKER_TYPE" INIT_INST_WORKER_TYPE
-echo ""
-read -e -p "Which zone do you want to place these in: " -i "$DEFAULT_ZONE" INIT_ZONE
-echo ""
-read -e -p "Which image do you wish to use: " -i "$DEFAULT_IMG" INIT_IMG
-echo ""
-read -e -p "Some providers use temp nodes as a cheaper option (AWS uses spot requests) Do you wish to use these? (Y/N): " -i "Y" INIT_TEMP_REQ
-if [ "$INIT_TEMP_REQ" == "Y" ]; then
     echo ""
-    read -e -p "What price do you wish to use as your temp request offer for Masters? (${INIT_INST_MASTER_TYPE}): " -i "${DEFAULT_INST_MASTER_SPOT_PRICE}" INIT_TEMP_MASTER_PRICE
+    echo "-----------------------------------"
+    echo "This process will ensure you are setup correctly for using platform specific provisioning  (if available) and values are stored in platform.conf"
+    echo "The configuration will be located: $PLATFORM_CONF"
     echo ""
-    read -e -p "What price do you wish to use as your temp request offer for Workers? (${INIT_INST_WORKER_TYPE}): " -i "${DEFAULT_INST_WORKER_SPOT_PRICE}" INIT_TEMP_WORKER_PRICE
+    if [ "$UNATTEND" == "1" ]; then
+        if [ "$T_PLATFORM" != "" ]; then
+            PLATFORM="$T_PLATFORM"
+        else
+            echo "Cannot proceed, must provide a platform"
+            exit 1
+        fi
+    else
+
+        echo "Which platform will this zeta cluster be built on?"
+        echo "Here is a list of available platform libraries:"
+        echo ""
+        ls ./scripts/lib/*platform|sed "s@\./scripts/lib/@@g"
+        echo ""
+        read -e -p "Please enter the platform lib choice: " -i "$DEF_PLATFORM" PLATFORM
+    fi
+    if [ -f ".scripts/lib/$PLATFORM" ]; then
+        echo "Loading Platform Modules"
+        . "$_GO_USE_MODULES" $PLATFORM
+        PLAT_CMD=${T_PLAT_CMD:-$DEFAULT_PLAT_CMD}
+        PLAT_VER="$PLAT_CMD $DEFAULT_PLAT_VER"
+    else
+        echo "Platform file $PLATFORM not found at ./script/lib - Exiting"
+        exit 1
+    fi
+
     echo ""
-else
-    INIT_TEMP_PRICE="0"
-fi
-echo ""
+    echo "-----------------------------------"
+    echo "Initial User for Connection to Zeta Cluster"
+    echo "We need access to the initial nodes on the Zeta cluster. We do this through a username that has passwordless sudo and a key without a password"
+    echo ""
+    echo "The suggested users come from the platform definition, but feel free to add or change if you know better"
+    echo ""
+    if [ "$UNATTEND" == "1" ]; then
+        if [ "$T_INIT_USERS" != "" ]; then
+            MYINITUSERS=$(echo -n "$T_INIT_USERS"|tr "," " ")
+            INIT_USERS="$MYINITUSERS"
+        else
+            INIT_USERS="$DEFAULT_PLAT_USERS"
+        fi
+    else
+        read -e -p "Initial user list to connect to zeta nodes: " -i "$DEFAULT_PLAT_USERS" INIT_USERS
+        echo ""
+    fi
 
 
-touch $PLATFORM_CONF
-chmod 640 $PLATFORM_CONF
+    echo ""
+    echo "-----------------------------------"
+    echo "We now need the key for the initial connection, this is typically location in /home/$CURUSER/.ssh/id_rsa, but doesn't have to be. Please specify that here"
+    echo ""
+    if [ "$UNATTEND" == "1" ]; then
+        INIT_KEY_LOC=${T_INIT_KEY_LOC:-$DEF_INIT_KEY_LOC}
+        INIT_KEY_NAME=${T_INIT_KEY_NAME:-$DEF_INIT_KEY_NAME}
+    else
+        read -e -p "Private key for initial user on aws nodes: " -i "$DEF_INIT_KEY_LOC" INIT_KEY_LOC
+        echo ""
+        read -e -p "What does your platform call this key: " -i "$DEV_INIT_KEY_NAME" INIT_KEY_NAME
+        echo ""
+    fi
+
+    echo ""
+    echo "-----------------------------------"
+    echo "As we are prepping the nodes, it's helpful to have a list of interfaces to check for the internal IP Address of the nodes. "
+    echo "Basically provide a space separated list, and the first interface in that list that returns an IP will be the lucky winner"
+    echo ""
+    if [ "$UNATTEND" == "1" ]; then
+        if [ "$T_INTERFACE_LIST" != "" ]; then
+            MYINTERFACELIST=$(echo -n "$T_INTERFACE_LIST"|tr "," " ")
+            INTERFACE_LIST="$MYINTERFACELIST"
+        else
+            INTERFACE_LIST="$DEFAULT_PLAT_NETWORK"
+        fi
+    else
+        read -e -p "Interface to check list: " -i "$DEFAULT_PLAT_NETWORK" INTERFACE_LIST
+        echo ""
+    fi
+    echo ""
+    echo "-----------------------------------"
+    echo ""
+    echo "The Platform command for your choosen platform is: $PLAT_CMD, we will now check to see if we can run this"
+    echo ""
+    $PLAT_VER
+    echo ""
+    if [ "$?" != "0" ]; then
+        echo "The platform version command returned an error rather than a version. We will not attemp to run the default platform install"
+        plat_install
+        $PLAT_VER
+        if [ "$?" != "0" ]; then
+            echo "Even after trying to run the platform install, the platform version failed, sorry, exiting"
+            exit 1
+        fi
+    else
+        echo "Your platform command was found and returned a version. Please ensure you have embedded the appropriate authentication into the commmand to ensure proper opertion"
+    fi
+    echo ""
+    echo "-----------------------------------"
+    echo "We will using the platform library: $PLATFORM - Now we are going to discuss provisioning of initial nodes"
+    echo ""
+
+    if [ "$UNATTEND" == "1" ]; then
+#        INIT_=${T_INIT_:-$DEFAULT_INIT_}
+        INIT_MASTER_NUM_NODES=${T_INIT_MASTER_NUM_NODES:-$DEFAULT_INIT_MASTER_NUM_NODES}
+        INIT_WORKER_NUM_NODES=${T_INIT_WORKER_NUM_NODES:-$DEFAULT_INIT_WORKER_NUM_NODES}
+        INIT_MASTER_OS_SIZE=${T_INIT_MASTER_OS_SIZE:-$DEFAULT_INIT_MASTER_OS_SIZE}
+        INIT_WORKER_OS_SIZE=${T_INIT_WORKER_OS_SIZE:-$DEFAULT_INIT_WORKER_OS_SIZE}
+        INIT_DATA_SIZE=${T_INIT_DATA_SIZE:-$DEFAULT_INIT_DATA_SIZE}
+        INIT_NUM_DATA_VOL=${T_INIT_NUM_DATA_VOL:-$DEFAULT_INIT_NUM_DATA_VOL}
+        INIT_INST_MASTER_TYPE=${T_INIT_INST_MASTER_TYPE:-$DEFAULT_INIT_INST_MASTER_TYPE}
+        INIT_INST_WORKER_TYPE=${T_INIT_INST_WORKER_TYPE:-$DEFAULT_INIT_INST_WORKER_TYPE}
+        INIT_ZONE=${T_INIT_ZONE:-$DEFAULT_INIT_ZONE}
+        INIT_REGION=${T_INIT_REGION:-$DEFAULT_INIT_REGION}
+        INIT_IMG=${T_INIT_IMG:-$DEFAULT_INIT_IMG}
+        INIT_SEC_GROUP=${T_INIT_SEC_GROUP:-$DEFAULT_INIT_SEC_GROUP}
+        INIT_TEMP_MASTER_PRICE=${T_INIT_TEMP_MASTER_PRICE:-$DEFAULT_INIT_TEMP_MASTER_PRICE}
+        INIT_TEMP_WORKER_PRICE=${T_INIT_TEMP_WORKER_PRICE:-$DEFAULT_INIT_TEMP_WORKER_PRICE}
+    else
+        echo ""
+        read -e -p "How many initial nodes (masters): " -i "${DEFAULT_INIT_MASTER_NUM_NODES}" INIT_MASTER_NUM_NODES
+        echo ""
+        read -e -p "How many initial nodes (workers): " -i "${DEFAULT_INIT_WORKER_NUM_NODES}" INIT_WORKER_NUM_NODES
+        echo ""
+        read -e -p "How big do you want the OS Volume to be (Masters)? (Size in GB): " -i "${DEFAULT_INIT_MASTER_OS_SIZE}" INIT_MASTER_OS_SIZE
+        echo ""
+        read -e -p "How big do you want the OS Volume to be (Workers)? (Size in GB): " -i "${DEFAULT_INIT_WORKER_OS_SIZE}" INIT_WORKER_OS_SIZE
+        echo ""
+        read -e -p "How big do you want the Data Volumes to be? (Size in GB): " -i "${DEFAULT_INIT_DATA_SIZE}" INIT_DATA_SIZE
+        echo ""
+        read -e -p "How many data volumes do you want? " -i "${DEFAULT_INIT_NUM_DATA_VOL}" INIT_NUM_DATA_VOL
+        echo ""
+        read -e -p "Which instance size do you wish to use for masters: " -i "$DEFAULT_INST_MASTER_TYPE" INIT_INST_MASTER_TYPE
+        echo ""
+        read -e -p "Which instance size do you wish to use for workers: " -i "$DEFAULT_INST_WORKER_TYPE" INIT_INST_WORKER_TYPE
+        echo ""
+        read -e -p "Which zone do you want to place these in: " -i "$DEFAULT_INIT_ZONE" INIT_ZONE
+        echo ""
+        read -e -p "Which region do you want to place these in: "-i "$DEFAULT_INIT_REGION" INIT_REGION
+        echo ""
+        read -e -p "Which image do you wish to use: " -i "$DEFAULT_INIT_IMG" INIT_IMG
+        echo ""
+        read -e -p "Please enter the Security group you wish to use: " -i "$DEFAULT_INIT_SEC_GROUP" INIT_SEC_GROUP
+        echo ""
+        read -e -p "Some providers use temp nodes as a cheaper option (AWS uses spot requests) Do you wish to use these? (Y/N): " -i "Y" INIT_TEMP_REQ
+        if [ "$INIT_TEMP_REQ" == "Y" ]; then
+            echo ""
+            read -e -p "What price do you wish to use as your temp request offer for Masters? (${INIT_INST_MASTER_TYPE}): " -i "${DEFAULT_INST_MASTER_SPOT_PRICE}" INIT_TEMP_MASTER_PRICE
+            echo ""
+            read -e -p "What price do you wish to use as your temp request offer for Workers? (${INIT_INST_WORKER_TYPE}): " -i "${DEFAULT_INST_WORKER_SPOT_PRICE}" INIT_TEMP_WORKER_PRICE
+            echo ""
+        else
+            INIT_TEMP_MASTER_PRICE="0"
+            INIT_TEMP_WORKER_PRICE="0"
+        fi
+
+
+    touch $PLATFORM_CONF
+    chmod 640 $PLATFORM_CONF
 
 cat > $PLATFORM_CONF << EOF
 #!/bin/bash
@@ -120,27 +268,19 @@ INIT_MASTER_OS_SIZE="$INIT_MASTER_OS_SIZE"
 INIT_WORKER_OS_SIZE="$INIT_WORKER_OS_SIZE"
 INIT_DATA_SIZE="$INIT_DATA_SIZE"
 INIT_NUM_DATA_VOL="$INIT_NUM_DATA_VOL"
-INIT_SEC_GROUP="$INIT_SEC_GROUP"
 INIT_INST_MASTER_TYPE="$INIT_INST_MASTER_TYPE"
 INIT_INST_WORKER_TYPE="$INIT_INST_WORKER_TYPE"
 INIT_ZONE="$INIT_ZONE"
+INIT_REGION="$INIT_REGION"
 INIT_IMG="$INIT_IMG"
+INIT_SEC_GROUP="$INIT_SEC_GROUP"
 INIT_TEMP_MASTER_PRICE="$INIT_TEMP_MASTER_PRICE"
 INIT_TEMP_WORKER_PRICE="$INIT_TEMP_WORKER_PRICE"
-AWS_CMD="aws"
-
-#Nodes are ; sep, name,intip,extip,;name,initip,extip
-NODES=""
-
-
-
 
 # If this is set to 1, scripts will assume "Use" when the conf exists.
 PLATFORM_LOCKED="0"
-
-
-
 EOF
+    @go.log INFO "Platform Conf file written to $PLATFORM_CONF"
 
-@go.log INFO "Platform Conf file written to $PLATFORM_CONF"
-
+}
+_platformcreateconf "$@"

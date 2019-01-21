@@ -29,3 +29,4 @@ rm ./conf/iuser.key
 rm ./conf/iuser.key.pub
 rm ./conf/userupdate.sh
 rm ./conf/prep.conf
+rm ./conf/fs.conf

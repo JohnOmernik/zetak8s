@@ -3,45 +3,114 @@
 # Create conf file for initial K8s installation
 #
 
+sourceconf "$PLATFORM_CONF"
 
-UNATTEND=$1
-echo "UNATTEND: $UNATTEND"
 
-if [ "$UNATTEND" == "1" ]; then
-    echo "Using default certs (used for testing only)"
-    CA_C="US"
-    CA_ST="WI"
-    CA_L="Madison"
-    CA_O="K8s"
-    CA_OU="CA"
-    CA_CN="zetak8s"
-else
-    echo ""
-    echo "Gather Information about the CA for Secure Communication"
-    echo "This information will be the info on the CA and the default provided for certifications as well"
-    echo "---------------"
-    read -e -p "Please enter the CA Country (C): " -i "US" CA_C
-    echo ""
-    read -e -p "Please enter the CA State (ST): " -i "WI" CA_ST
-    echo ""
-    read -e -p "Please enter the CA Location (L): " -i "Madison" CA_L
-    echo ""
-    read -e -p "Please enter the CA Organization (O): " -i "K8s" CA_O
-    echo ""
-    read -e -p "Please enter the CA Oranizational Unit (OU): " -i "CA" CA_OU
-    echo ""
-    read -e -p "Please enter the CA Common Name (CN): " -i "zetak8s" CA_CN
-    echo ""
-fi
-CA_ALGO="rsa"
-CA_KEYSIZE="4096"
-echo ""
+function _cacreateconf() {
+    # CA.conf defaults to use on unattended install
+    DEF_CA_C="US"
+    DEF_CA_ST="WI"
+    DEF_CA_L="Madison"
+    DEF_CA_O="K8s"
+    DEF_CA_OU="CA"
+    DEF_CA_CN="zetak8s"
+    DEF_CA_ALGO="rsa"
+    DEF_CA_KEYSIZE="4096"
 
-CA_DEFAULT_C="$CA_C"
-CA_DEFAULT_ST="$CA_ST"
-CA_DEFAULT_L="$CA_L"
-CA_DEFAULT_O="$CA_O"
-CA_DEFAULT_OU="$CA_OU"
+    UNATTEND="0"
+    for i in "$@"
+    do
+    case $i in
+        -u)
+        UNATTEND="1"
+        ;;
+        "-c="*)
+        T_CA_C="${i#*=}"
+        ;;
+        "-st="*)
+        T_CA_ST="${i#*=}"
+        ;;
+        "-l="*)
+        T_CA_L="${i#*=}"
+        ;;
+        "-o="*)
+        T_CA_O="${i#*=}"
+        ;;
+        "-ou="*)
+        T_CA_OU="${i#*=}"
+        ;;
+        "-cn="*)
+        T_CA_CN="${i#*=}"
+        ;;
+        "-algo="*)
+        T_CA_ALGO="${i#*=}"
+        ;;
+        "-ks="*)
+        T_CA_KEYSIZE="${i#*=}"
+        ;;
+
+        *)
+    esac
+    done
+
+
+
+    echo "UNATTEND: $UNATTEND"
+
+    if [ "$UNATTEND" == "1" ]; then
+        echo "Using default certs (used for testing only)"
+        CA_C=${T_CA_C:-$DEF_CA_C}
+        CA_ST=${T_CA_ST:-$DEF_CA_ST}
+        CA_L=${T_CA_L:-$DEF_CA_L}
+        CA_O=${T_CA_O:-$DEF_CA_O}
+        CA_OU=${T_CA_OU:-$DEF_CA_OU}
+        CA_CN=${T_CA_CN:-$DEF_CA_CN}
+        CA_ALGO=${T_CA_ALGO:-$DEF_CA_ALGO}
+        CA_KEYSIZE=${T_CA_KEYSIZE:-$DEF_CA_KEYSIZE}
+        echo ""
+        echo "***** Using CA C, ST, L, O, and OU as the default for all new certs due to unattended install"
+        echo ""
+        CA_DEFAULT_C="$CA_C"
+        CA_DEFAULT_ST="$CA_ST"
+        CA_DEFAULT_L="$CA_L"
+        CA_DEFAULT_O="$CA_O"
+        CA_DEFAULT_OU="$CA_OU"
+    else
+        echo ""
+        echo "Gather Information about the CA for Secure Communication"
+        echo "This information will be the info on the CA and the default provided for certifications as well"
+        echo "---------------"
+        read -e -p "Please enter the CA Country (C): " -i "$DEF_CA_C" CA_C
+        echo ""
+        read -e -p "Please enter the CA State (ST): " -i "$DEF_CA_ST" CA_ST
+        echo ""
+        read -e -p "Please enter the CA Location (L): " -i "$DEF_CA_L" CA_L
+        echo ""
+        read -e -p "Please enter the CA Organization (O): " -i "$DEF_CA_O" CA_O
+        echo ""
+        read -e -p "Please enter the CA Oranizational Unit (OU): " -i "$DEF_CA_OU" CA_OU
+        echo ""
+        read -e -p "Please enter the CA Common Name (CN): " -i "$DEF_CA_CN" CA_CN
+        echo ""
+        read -e -p "Please enter the CA algorithm to use: " -i "$DEF_CA_ALGO" CA_ALGO
+        echo ""
+        read -e -p "Please enter the CA Keysize to use: " -i "$DEF_CA_KEYSIZE" CA_KEYSIZE
+        echo ""
+        read -e -p "Please enter the default Country for certs (C): " -i "$CA_C" CA_DEFAULT_C
+        echo ""
+        read -e -p "Please enter the default State for certs (ST): " -i "$CA_ST" CA_DEFAULT_ST
+        echo ""
+        read -e -p "Please enter the default Location for certs (L): " -i "$CA_L" CA_DEFAULT_L
+        echo ""
+        read -e -p "Please enter the default Organization for certs (O): " -i "$CA_O" CA_DEFAULT_O
+        echo ""
+        read -e -p "Please enter the default Oranizational Unit for certs (OU): " -i "$CA_OU" CA_DEFAULT_OU
+
+    fi
+    echo ""
+
+
+
 
 cat > $CA_CONF << EOP
 #!/bin/bash
@@ -65,4 +134,5 @@ CA_KEYSIZE="$CA_KEYSIZE"
 
 EOP
 
-
+}
+_cacreateconf "$@"

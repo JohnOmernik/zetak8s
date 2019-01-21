@@ -1,47 +1,133 @@
 # zetak8s
 Zeta running in K8s
+--------
+# Quick Note about Auto scripts
+------
+There are two scripts included to automate cluster creation
+- auto_start.sh       # This script can only be run if platform.conf is setup and ready to go. If not, it will fail and you will have no cluster
+- auto_reset.sh       # This script terminates everything to the best of it's ability and removes all conf files EXCEPT platform.conf.  (So you can quickly start and stop things)
 
 --------
-# Order to get a K8s Cluster Runngin
+# Order to get a K8s Cluster Running
+-------
+## Platform Scripts
+---------
+This sets up the platform being using.  Right now automated setup of platform is limited to AWS.  To use another platform, you need to have servers setup in a way that allows you to connect with a key. 
 
-1. ./zeta platform 
-   
-This asks some questions on what platform, what type of nodes, etc. Right now we only have AWS
+(More information to come)
 
-2. ./zeta ca 
+This is the first thing you must do either for manual, or for the auto_start.sh. The following step MUST BE DONE. 
 
-This asks some questions on your CA. It.s stored in ./conf/ca 
+### Platform conf
+```
+./zeta platform
+```
+------
+This creates the platform.conf file for interacting with the platform of choice. 
 
-3. ./zeta ca createca 
 
-This actually instantiates your CA
 
-4.  ./zeta platform startnodes
+## CA Scripts
+------
+In order to be secure with K8s, and in general we create a local CA.  At this time only a local CA is supported, although, I could see us being able to integrate to enterprise CAs if needed. 
 
-4.5. ./zeta platform status # Optional show status of nodes
+We use cfssl to create the CA and use it.  
 
-This runs your platform startup, gets you 5 nodes (You can check this with ./zeta platform status)
+------
+### Note
+------
+This is where the auto_start.sh script starts, it doesn't call ./zeta platform at this time
 
-5. ./zeta k8s
 
-This asks some questions for your K8s Cluster based on your started nodes in 4
+### CA conf
+```
+./zeta ca 
+```
+------
+This creates the ca.conf file for creating the CA. 
 
-6. ./zeta k8s createlb
+If you run this with -u it runs unattended and uses some defaults for CA values.  If you want to run with -u and pass your own values in as defaults you may
 
-Creates a LB for us to use
+- -u      # Unattended
+- -c      # Country
+- -st     # State
+- -l      # Location
+- -o      # Organization
+- -ou     # Organizational Unit
+- -cn     # Common Name
+- -algo   # Algorithm used
+- -ks     # Key size
 
-7. ./zeta prep
+If you run this without -u it will ask you these questions. All resulsts are stored in ./conf/ca.conf
 
-Initializes the prep scripts 
+### Create the CA
+```
+./zeta ca createca 
+```
+----
+This actually instantiates your CA based on the values in ca.conf
 
-8. ./zeta prep install -a
 
-Installs the new users and docker on all nodes. Also creates /opt/k8s and works to patch. 
+## Back to Platform
+-----
+The following two steps actually uses the platform library to start up the nodes automatically if supported
+-----
+### Start the nodes
+-----
+Start the nodes given the count and types in the platform.conf
+```
+./zeta platform startnodes
+```
 
-9. ./zeta prep status 
+### Check Node status
+-----
+Display the status of the nodes
+```
+./zeta platform status 
+````
 
-This shows the status of the nodes, they should be up and running and good with docker. 
+## K8s Configuration and setup
+-----
+Now that you've defined your platform and started some nodes, we run through the k8s conf setup to help with setup later on
 
+### Create the K8s conf
+-----
+The conf is created now so that we can reference your setup in the future steps
+```
+./zeta k8s
+```
+### Create Load Balancer
+----
+This is a platform specific setup that allows you to connect to all the nodes easily. If on prem, there may not be a load balancer, so it will just ensure there is local network connectivity. 
+```
+./zeta k8s createlb
+```
+
+## Prep the nodes
+----
+These scripts do some basic install based on the OS of the nodes. 
+### Run the prep.conf install
+-------
+Asks some questions about the setup
+```
+./zeta prep
+```
+
+### Install prep items
+-----
+Installs the users, software, and settings on all nodes (-a) based on the requirements of the OS
+```
+./zeta prep install -a
+```
+
+### Display prep status
+-----
+Shows all the nodes and the status of the prep work
+```
+./zeta prep status 
+```
+
+###########################################################################################
 10. ./zeta k8s initk8scerts 
 
 This generates the client and server scripts

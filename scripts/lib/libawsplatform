@@ -5,15 +5,22 @@
 # plat_install - install the command line tools for the platform
 DEFAULT_PLAT_USERS="ubuntu centos"
 DEFAULT_PLAT_NETWORK="eth0"
-DEFAULT_PLAT_CMD="$AWS_CMD"
+DEFAULT_PLAT_CMD="aws"
 DEFAULT_PLAT_VER="--version"
+DEFAULT_INIT_MASTER_NUM_NODES="3"
+DEFAULT_INIT_WORKER_NUM_NODES="6"
+DEFAULT_INIT_MASTER_OS_SIZE="100"
+DEFAULT_INIT_WORKER_OS_SIZE="750"
+DEFAULT_INIT_DATA_SIZE="16"
+DEFAULT_INIT_NUM_DATA_VOL="3"
 DEFAULT_INST_MASTER_TYPE="m5.2xlarge"
 DEFAULT_INST_MASTER_SPOT_PRICE="0.18"     # 0.384 Full Price
 DEFAULT_INST_WORKER_TYPE="m5.4xlarge"
 DEFAULT_INST_WORKER_SPOT_PRICE="0.30"     # 0.768 Full Price
-
-DEFAULT_ZONE="us-west-2c"
-DEFAUT_IMG="ami-4e79ed36" # Ubuntu 16.04
+DEFAULT_INIT_SEC_GROUP="NA" # Can't specify here
+DEFAULT_INIT_ZONE="ANY"
+DEFAULT_INT_REGION="us-west-2"
+DEFAULT_INIT_IMG="ami-0bbe6b35405ecebdb" # Ubuntu 18.04
 
 function plat_install(){
     echo "--------------------------------------------"

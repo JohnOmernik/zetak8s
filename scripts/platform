@@ -24,10 +24,15 @@ function _platform() {
     esac
     done
 
-    initconf "$PLATFORM_CONF"
+    initconf "$PLATFORM_CONF" "$@"
 
     echo "Commands to use with platform:"
     echo ""
+    echo ""
+    echo "./zeta platform startnodes       # Run through an initial start based on the platform conf"
+    echo "./zeta platform status           # Show the status"
+    echo "./zeta platform termnodes        # Shutdown on all nodes based on the conf file"
+    echo "./zeta platform -l               # Lock or unlock platform.conf file"
     echo ""
     echo ""
     echo "To lock or unlock the platform config:"
