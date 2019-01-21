@@ -1,0 +1,58 @@
+#!/bin/bash
+
+#
+# Get Status of EtcD Nodes#
+#
+sourceconf "$PLATFORM_CONF"
+sourceconf "$CA_CONF"
+sourceconf "$K8S_CONF"
+sourceconf "$PREP_CONF"
+
+function _etcdstatus(){
+
+    ret_init_inst "master" "MASTER_SPOT_INSTS"
+    ret_init_inst "worker" "WORKER_SPOT_INSTS"
+
+    if [ "$MASTER_SPOT_INSTS" == "" ]; then
+        @go.log FATAL "No Master Nodes running exiting"
+    fi
+    if [ "$WORKER_SPOT_INSTS" == "" ]; then
+        @go.log FATAL "No Worker Nodes running exiting"
+    fi
+    ret_init_ips "MASTER_INST_STR" "$MASTER_SPOT_INSTS" 1
+    if [ "$MASTER_INST_STR" == "" ]; then
+        @go.log FATAL "No output from master status: exiting"
+    fi
+    ret_init_ips "WORKER_INST_STR" "$WORKER_SPOT_INSTS" 1
+    if [ "$WORKER_INST_STR" == "" ]; then
+        @go.log FATAL "No output from worker status: exiting"
+    fi
+
+    MASTER_INST_STR=$(echo "$MASTER_INST_STR"|tr ";" " ")
+    WORKER_INST_STR=$(echo "$WORKER_INST_STR"|tr ";" " ")
+
+
+
+    for M in $(echo "$MASTER_NODES"|tr "," " "); do
+        for INST in $MASTER_INST_STR; do
+            T=$(echo "$INST"|grep "$M")
+            if [ "$T" != "" ]; then
+                INT_IP=$(echo "$INST"|cut -d"," -f3)
+                EXT_IP=$(echo "$INST"|cut -d"," -f4)
+            fi
+        done
+        echo ""
+        echo "-------------------------------------------------------------"
+        echo ""
+        @go.log INFO "Obtaining EtcD Status on Node: $M running at $EXT_IP"
+        echo ""
+        ssh -i $OUT_KEY ${IUSER}@${EXT_IP} "$ETCD_STATUS_CMD"
+        echo ""
+    done
+
+
+}
+_etcdstatus "$@"
+
+
+

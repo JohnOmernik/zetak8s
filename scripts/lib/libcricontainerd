@@ -1,0 +1,59 @@
+### This is the cri install for containerd (CRI)
+
+
+CRI_TOML="  [plugins.cri.containerd]"$'\n'
+CRI_TOML="${CRI_TOML}    snapshotter = \"overlayfs\""$'\n'
+CRI_TOML="${CRI_TOML}    [plugins.cri.containerd.default_runtime]"$'\n'
+CRI_TOML="${CRI_TOML}      runtime_type = \"io.containerd.runtime.v1.linux\""$'\n'
+CRI_TOML="${CRI_TOML}      runtime_engine = \"/usr/local/bin/runc\""$'\n'
+CRI_TOML="${CRI_TOML}      runtime_root = \"\""$'\n'
+CRI_TOML="${CRI_TOML}    [plugins.cri.containerd.untrusted_workload_runtime]"$'\n'
+CRI_TOML="${CRI_TOML}      runtime_type = \"io.containerd.runtime.v1.linux\""$'\n'
+CRI_TOML="${CRI_TOML}      runtime_engine = \"/usr/local/bin/runsc\""$'\n'
+CRI_TOML="${CRI_TOML}      runtime_root = \"/run/containerd/runsc\""
+
+
+CRI_SVC="[Unit]"$'\n'
+CRI_SVC="${CRI_SVC}Description=containerd container runtime"$'\n'
+CRI_SVC="${CRI_SVC}Documentation=https://containerd.io"$'\n'
+CRI_SVC="${CRI_SVC}After=network.target"$'\n'
+CRI_SVC="${CRI_SVC}"$'\n'
+CRI_SVC="${CRI_SVC}[Service]"$'\n'
+CRI_SVC="${CRI_SVC}ExecStartPre=/sbin/modprobe overlay"$'\n'
+CRI_SVC="${CRI_SVC}ExecStart=/bin/containerd"$'\n'
+CRI_SVC="${CRI_SVC}Restart=always"$'\n'
+CRI_SVC="${CRI_SVC}RestartSec=5"$'\n'
+CRI_SVC="${CRI_SVC}Delegate=yes"$'\n'
+CRI_SVC="${CRI_SVC}KillMode=process"$'\n'
+CRI_SVC="${CRI_SVC}OOMScoreAdjust=-999"$'\n'
+CRI_SVC="${CRI_SVC}LimitNOFILE=1048576"$'\n'
+CRI_SVC="${CRI_SVC}LimitNPROC=infinity"$'\n'
+CRI_SVC="${CRI_SVC}LimitCORE=infinity"$'\n'
+CRI_SVC="${CRI_SVC}"$'\n'
+CRI_SVC="${CRI_SVC}[Install]"$'\n'
+CRI_SVC="${CRI_SVC}WantedBy=multi-user.target"$'\n'
+
+CRI_RUNTIME="--container-runtime=remote"
+CRI_RUNTIME_ENDPOINT="--container-runtime-endpoint=unix:///var/run/containerd/containerd.sock"
+
+# This should probably be put in a vers file
+COND_BASE="https://github.com/containerd/containerd/releases/download/v1.1.0"
+COND_FILE="containerd-1.1.0.linux-amd64.tar.gz"
+
+RUNC_BASE="https://github.com/opencontainers/runc/releases/download/v1.0.0-rc5"
+RUNC_FILE="runc.amd64"
+
+RUNSC_BASE="https://storage.googleapis.com/kubernetes-the-hard-way"
+RUNSC_FILE="runsc"
+
+CRICTL_BASE="https://github.com/kubernetes-incubator/cri-tools/releases/download/v1.0.0-beta.0"
+CRICTL_FILE="crictl-v1.0.0-beta.0-linux-amd64.tar.gz"
+
+K8S_DL_CRI_CMD="wget  --no-verbose --https-only --timestamping ${COND_BASE}/${COND_FILE} ${RUNC_BASE}/${RUNC_FILE} ${RUNSC_BASE}/${RUNSC_FILE} ${CRICTL_BASE}/${CRICTL_FILE}"
+K8S_MV_CRI_CMD="tar -xvf ${COND_FILE} -C ${K8S_BIN_DIR}/ && rm ${COND_FILE} && mv ${K8S_BIN_DIR}/bin ${K8S_BIN_DIR}/containerd && mv ${RUNSC_FILE} ${K8S_BIN_DIR}/ && mv ${RUNC_FILE} ${K8S_BIN_DIR}/ && tar -xvf ${CRICTL_FILE} -C ${K8S_BIN_DIR}/ && rm ${CRICTL_FILE} && sudo chmod +x ${K8S_BIN_DIR}/*"
+K8S_LN_CRI_CMD="sudo ln -s ${K8S_BIN_DIR}/${RUNC_FILE} /usr/local/bin/runc && sudo ln -s ${K8S_BIN_DIR}/${RUNSC_FILE} /usr/local/bin/runsc && sudo ln -s ${K8S_BIN_DIR}/crictl /usr/local/bin/crictl && sudo ln -s ${K8S_BIN_DIR}/containerd/containerd /bin/containerd && sudo ln -s ${K8S_BIN_DIR}/containerd/containerd-release /bin/containerd-release && sudo ln -s ${K8S_BIN_DIR}/containerd/containerd-shim /bin/containerd-shim && sudo ln -s ${K8S_BIN_DIR}/containerd/containerd-stress /bin/containerd-stress && sudo ln -s ${K8S_BIN_DIR}/containerd/ctr /bin/ctr"
+K8S_START_CRI_CMD="sudo systemctl daemon-reload && sudo systemctl enable containerd && sudo systemctl start containerd"
+
+K8S_SVC_REQUIRES="Requires=containerd.service"
+K8S_SVC_AFTER="After=containerd.service"
+

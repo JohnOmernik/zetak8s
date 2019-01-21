@@ -8,7 +8,9 @@
 #
 
 sourceconf "$PREP_CONF"
-
+sourceconf "$K8S_CONF"
+sourceconf "$CA_CONF"
+sourceconf "$PLATFORM_CONF"
 function _displayhelp(){
     echo "prep status - Provide a node prep status report by default it returns status on all nodes in prep.conf "
     echo "===================================================================================================="
@@ -57,7 +59,7 @@ function _prep_status() {
     fi
 
     if [ "$ALL" == "1" ]; then
-        MYHOSTS="$NODES"
+        MYHOSTS=$(echo -n "$ALL_NODES_EXT_IP"|tr "," " ")
     else
         MYHOSTS="$HOST"
     fi
@@ -121,10 +123,6 @@ EOF
         fi
     done
     echo ""
-    echo ""
-    echo "To log into the initial node, please use:"
-    echo ""
-    echo "ssh -i $OUT_KEY ${IUSER}@$INIT_NODE"
     echo ""
 
 }

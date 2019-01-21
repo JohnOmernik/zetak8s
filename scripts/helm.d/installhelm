@@ -1,0 +1,39 @@
+#!/bin/bash
+
+#
+# Sets up Helm for K8s cluster
+#
+sourceconf "$PLATFORM_CONF"
+sourceconf "$CA_CONF"
+sourceconf "$K8S_CONF"
+sourceconf "$PREP_CONF"
+sourceconf "$HELM_CONF"
+
+function _installhelm(){
+    if [ ! -f "./bin/helm" ]; then
+        wget $HELM_URL
+        tar zxf $HELM_FILE
+        mv ./linux-amd64/helm ./bin
+        rm $HELM_FILE
+        rm -rf ./linux-amd64
+        chmod +x ./bin/helm
+        mkdir -p ./conf/helm
+        chmod 770 ./conf/helm
+cat > ./helm << EOF
+#!/bin/bash
+MYDIR=\$(dirname \$0)
+cd \$MYDIR
+cp ./conf/k8s/admin/admin_ext.kubeconfig ~/.kube/config
+./bin/helm --home ./conf/helm  "\$@"
+rm ~/.kube/config
+#--kube-context ./conf/k8s/admin/admin_ext.kubeconfig "\$@"
+EOF
+    chmod +x ./helm
+    else
+        @go.log WARN "./bin/helm already exists, not downloading"
+    fi
+}
+_installhelm "$@"
+
+
+

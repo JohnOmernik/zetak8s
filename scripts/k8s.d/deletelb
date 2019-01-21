@@ -4,7 +4,7 @@
 # Delete an Establshed LB  a loadbalancer based on the provied information
 ##
 sourceconf "$PLATFORM_CONF"
-sourceconf "K8S_CONF"
+sourceconf "$K8S_CONF"
 function _deletelb(){
  for i in "$@"
         do
@@ -25,15 +25,35 @@ function _deletelb(){
     if [ "$TGARN" == "" ]; then
         @go.log FATAL "No TGARN defined in k8s.conf - exiting"
     fi
-    
-    
-
 
 # To delete them
-    aws elbv2 delete-load-balancer --load-balancer-arn $LBARN
+    if [ "$UNATTEND" != "1" ]; then
+        read -e -p "Do you wish to deleted Target group $TGARN and Load Balancer $LBARN? (Y/N): " -i "N" DELME
+        if [ "$DELME" != "Y" ]; then
+            @go.log FATAL "User decided against delete!"
+        fi
+    fi
+    echo ""
+    @go.log INFO "Trying to delete LB $LBARN"
+    echo ""
+    delete_network_lb "$LBARN" "RES"
+    if [ "$RES" == "0" ]; then
+        @go.log INFO "Network Loadbalancer $LBARN Deleted!"
+    else
+        @go.log WARN "Network Loadbalancer $LBARN could not be deleted!!!!"
+    fi
 
-    aws elbv2 delete-target-group --target-group-arn $TGARN
+    echo ""
+    @go.log INFO "Trying to delete TG $TGARN"
+    echo ""
+    delete_network_lb_tg "$TGARN" "RES"
+    if [ "$RES" == "0" ]; then
+        @go.log INFO "Network Loadbalancer Target Group $TGARN Deleted!"
+    else
+        @go.log WARN "Network Loadbalancer $TGARN could not be deleted!!!!"
+    fi
 
+echo ""
 echo "Load Balancer Deleted: "
 echo "-----------------------"
 echo "LB DNS: $LBDBS"
@@ -47,7 +67,7 @@ echo "-----------------------"
 
 sed -i "s/LBARN=.*//g" $K8S_CONF
 sed -i "s/TGARN=.*//g" $K8S_CONF
-sed -i "s/LISTENERARNARN=.*//g" $K8S_CONF
+sed -i "s/LISTENERARN=.*//g" $K8S_CONF
 sed -i "s/LBDNS=.*//g" $K8S_CONF
 
 }

@@ -8,12 +8,15 @@ sourceconf "$PLATFORM_CONF"
 function _ca() {
 
     LOCK="0"
-
+    UNATTEND="0"
     for i in "$@"
     do
     case $i in
         -l)
         LOCK="1"
+        ;;
+        -u)
+        UNATTEND="1"
         ;;
         *)
             # unknown option
@@ -21,7 +24,7 @@ function _ca() {
     esac
     done
 
-    initconf "$CA_CONF"
+    initconf "$CA_CONF" "$UNATTEND"
 
     echo ""
     echo "********************************"

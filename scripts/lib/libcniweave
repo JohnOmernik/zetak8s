@@ -1,0 +1,45 @@
+### This is the install for a Weave based CNI Network
+
+
+CNI_BASE="https://github.com/containernetworking/plugins/releases/download/v0.7.4"
+CNI_FILE="cni-plugins-amd64-v0.7.4.tgz"
+
+WEAVE_CNI_BASE="https://cloud.weave.works/k8s/net?k8s-version="
+WEAVE_K8S_VER=$(kubectl version | base64 | tr -d '\n')
+
+#WEAVE_K8S_VER="Q2xpZW50IFZlcnNpb246IHZlcnNpb24uSW5mb3tNYWpvcjoiMSIsIE1pbm9yOiIxMiIsIEdpdFZlcnNpb246InYxLjEyLjQiLCBHaXRDb21taXQ6ImY0OWZhMDIyZGJlNjNmYWFmZDBkYTEwNmVmN2UwNWEyOTcyMWQzZjEiLCBHaXRUcmVlU3RhdGU6ImNsZWFuIiwgQnVpbGREYXRlOiIyMDE4LTEyLTE0VDA3OjEwOjAwWiIsIEdvVmVyc2lvbjoiZ28xLjEwLjQiLCBDb21waWxlcjoiZ2MiLCBQbGF0Zm9ybToibGludXgvYW1kNjQifQpTZXJ2ZXIgVmVyc2lvbjogdmVyc2lvbi5JbmZve01ham9yOiIxIiwgTWlub3I6IjEyIiwgR2l0VmVyc2lvbjoidjEuMTIuNCIsIEdpdENvbW1pdDoiZjQ5ZmEwMjJkYmU2M2ZhYWZkMGRhMTA2ZWY3ZTA1YTI5NzIxZDNmMSIsIEdpdFRyZWVTdGF0ZToiY2xlYW4iLCBCdWlsZERhdGU6IjIwMTgtMTItMTRUMDY6NTk6MzdaIiwgR29WZXJzaW9uOiJnbzEuMTAuNCIsIENvbXBpbGVyOiJnYyIsIFBsYXRmb3JtOiJsaW51eC9hbWQ2NCJ9Cg=="
+ADDON_OPTIONS="&env.IPALLOC_RANGE=${K8S_CIDR_POD}"
+
+
+# CHECKPOINT_DISABLE - if set to 1, disable checking for new Weave Net versions (default is blank, i.e. check is enabled)
+# CONN_LIMIT - soft limit on the number of connections between peers. Defaults to 100.
+# HAIRPIN_MODE - Weave Net defaults to enabling hairpin on the bridge side of the veth pair for containers attached. If you need to disable hairpin, e.g. your kernel is one of those that can panic if hairpin is enabled, then you can disable it by setting HAIRPIN_MODE=false.
+# IPALLOC_RANGE - the range of IP addresses used by Weave Net and the subnet they are placed in (CIDR format; default 10.32.0.0/12)
+# EXPECT_NPC - set to 0 to disable Network Policy Controller (default is on)
+# KUBE_PEERS - list of addresses of peers in the Kubernetes cluster (default is to fetch the list from the api-server)
+# IPALLOC_INIT - set the initialization mode of the IP Address Manager (defaults to consensus amongst the KUBE_PEERS)
+# WEAVE_EXPOSE_IP - set the IP address used as a gateway from the Weave network to the host network - this is useful if you are configuring the addon as a static pod.
+# WEAVE_METRICS_ADDR - address and port that the Weave Net daemon will serve Prometheus-style metrics on (defaults to 0.0.0.0:6782)
+# WEAVE_STATUS_ADDR - address and port that the Weave Net daemon will serve status requests on (defaults to disabled)
+# WEAVE_MTU - Weave Net defaults to 1376 bytes, but you can set a smaller size if your underlying network has a tighter limit, or set a larger size for better performance if your network supports jumbo frames - see here for more details.
+# NO_MASQ_LOCAL - set to 1 to preserve the client source IP address when accessing Service annotated with service.spec.externalTrafficPolicy=Local. The feature works only with Weave IPAM (default).
+
+# kubectl apply -f "https://cloud.weave.works/k8s/net?k8s-version=$(kubectl version | base64 | tr -d '\n')&env.WEAVE_MTU=1337"
+
+
+function installcniyaml(){
+
+    CNI_WEAVE_YAML_URL="${WEAVE_CNI_BASE}${WEAVE_K8S_VER}${ADDON_OPTIONS}"
+    CNI_WEAVE_YAML="./conf/k8s/admin/weave.yaml"
+#    CNI_WEAVE_YAML="./weave.yaml"
+    wget --no-verbose -O ${CNI_WEAVE_YAML} ${CNI_WEAVE_YAML_URL} 
+
+    sed -i "s@path: /opt@path: /opt/k8s@g" ${CNI_WEAVE_YAML}
+    sed -i "s@path: /etc@path: /opt/k8s@g" ${CNI_WEAVE_YAML}
+
+    echo "Running:"
+    echo "$CNI_WEAVE_YAML"   
+    echo ""
+    echo "Applying Yaml Now"
+    ./bin/kubectl apply  --kubeconfig ./conf/k8s/admin/admin_ext.kubeconfig -f ${CNI_WEAVE_YAML}
+}

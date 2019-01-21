@@ -1,0 +1,67 @@
+#!/bin/bash
+#
+# Create conf file for initial Shared Filesytem installation
+#
+
+sourceconf "$PLATFORM_CONF"
+sourceconf "$CA_CONF"
+sourceconf "$K8S_CONF"
+sourceconf "$PREP_CONF"
+#sourceconf "$HELM_CONF"
+
+
+UNATTEND="$1"
+
+if [ "$UNATTEND" != "1" ]; then
+    echo "What file system provider do you wish to use for Zeta?"
+    read -e -p "Filesystem provider: " -i "mapr" FS_PROVIDER
+    if [ ! -d "./vers/$FS_PROVIDER" ]; then
+     @go.log FATAL "Chosen filesystem provider $FS_PROVIDER does not exist in .vers"
+    fi
+
+    echo ""
+    echo "As we build the docker containers for FS, we need a temporary Docker registry to host the containers"
+    echo ""
+    read -e -p "FS Docker Namespace: " -i "kube-system" FS_DOCKER_NAMESPACE
+    echo ""
+    read -e -p "FS Docker Hostname: " -i "fs-docker" FS_DOCKER_HOSTNAME
+    echo ""
+    read -e -p "Which port should the FS Docker register run on (we recommend 5000): " -i "5000" FS_DOCKER_PORT
+    echo ""
+else
+    FS_PROVIDER="mapr"
+    FS_DOCKER_NAMESPACE="kube-system"
+    FS_DOCKER_HOSTNAME="fs-docker"
+    FS_DOCKER_PORT="5000"
+fi
+
+FS_DOCKER_FQDN="${FS_DOCKER_HOSTNAME}.${FS_DOCKER_NAMESPACE}.svc.cluster.local"
+
+echo ""
+echo "The FS Docker will be ${FS_DOCKER_FQDN} running on port ${FS_DOCKER_PORT}"
+echo ""
+cat > $FS_CONF << EOF
+#!/bin/bash
+
+#########################
+# These are the editable settings for installing a Shared Filesystem (via FS_PROVIDER)  running on Zeta cluster.  Edit these settings prior to executing the scripts
+
+
+#########################
+# This is the docker registry that will be used to house the images so you don't have to build them on every node
+# After your cluster is started in AWS, pick a node and use the default port
+
+export FS_DOCKER_HOSTNAME="$FS_DOCKER_HOSTNAME"
+export FS_DOCKER_NAMESPACE="$FS_DOCKER_NAMESPACE"
+export FS_DOCKER_FQDN="${FS_DOCKER_FQDN}"
+export FS_DOCKER_PORT="$FS_DOCKER_PORT"
+export FS_DOCKER_URL="\${FS_DOCKER_FQDN}:\${FS_DOCKER_PORT}"
+
+export FS_PROVIDER="$FS_PROVIDER"
+
+export FS_LOCKED="1"
+
+EOF
+
+@go.log INFO "FS Conf file written to $FS_CONF"
+

@@ -56,17 +56,23 @@ fi
 
 echo "We will using the platform library: $PLATFORM - Now we are going to discuss provisioning of initial nodes"
 echo ""
-read -e -p "How many initial nodes (includes masters/workers): " -i "5" INIT_NUM_NODES
+read -e -p "How many initial nodes (masters): " -i "3" INIT_MASTER_NUM_NODES
 echo ""
-read -e -p "How big do you want the OS Volume to be? (Size in GB): " -i "32" INIT_OS_SIZE
+read -e -p "How many initial nodes (workers): " -i "7" INIT_WORKER_NUM_NODES
 echo ""
-read -e -p "How big do you want the Data Volumes to be? (Size in GB): " -i "8" INIT_DATA_SIZE
+read -e -p "How big do you want the OS Volume to be (Masters)? (Size in GB): " -i "100" INIT_MASTER_OS_SIZE
+echo ""
+read -e -p "How big do you want the OS Volume to be (Workers)? (Size in GB): " -i "750" INIT_WORKER_OS_SIZE
+echo ""
+read -e -p "How big do you want the Data Volumes to be? (Size in GB): " -i "16" INIT_DATA_SIZE
 echo ""
 read -e -p "How many data volumes do you want? " -i "3" INIT_NUM_DATA_VOL
 echo ""
 read -e -p "Please enter the Security group you wish to use: " INIT_SEC_GROUP
 echo ""
-read -e -p "Which instance size do you wish to use: " -i "$DEFAULT_INST_TYPE" INIT_INST_TYPE
+read -e -p "Which instance size do you wish to use for masters: " -i "$DEFAULT_INST_MASTER_TYPE" INIT_INST_MASTER_TYPE
+echo ""
+read -e -p "Which instance size do you wish to use for workers: " -i "$DEFAULT_INST_WORKER_TYPE" INIT_INST_WORKER_TYPE
 echo ""
 read -e -p "Which zone do you want to place these in: " -i "$DEFAULT_ZONE" INIT_ZONE
 echo ""
@@ -74,27 +80,15 @@ read -e -p "Which image do you wish to use: " -i "$DEFAULT_IMG" INIT_IMG
 echo ""
 read -e -p "Some providers use temp nodes as a cheaper option (AWS uses spot requests) Do you wish to use these? (Y/N): " -i "Y" INIT_TEMP_REQ
 if [ "$INIT_TEMP_REQ" == "Y" ]; then
-    read -e -p "What price do you wish to use as your temp request offer? " -i "0.10" INIT_TEMP_PRICE
+    echo ""
+    read -e -p "What price do you wish to use as your temp request offer for Masters? (${INIT_INST_MASTER_TYPE}): " -i "${DEFAULT_INST_MASTER_SPOT_PRICE}" INIT_TEMP_MASTER_PRICE
+    echo ""
+    read -e -p "What price do you wish to use as your temp request offer for Workers? (${INIT_INST_WORKER_TYPE}): " -i "${DEFAULT_INST_WORKER_SPOT_PRICE}" INIT_TEMP_WORKER_PRICE
+    echo ""
 else
     INIT_TEMP_PRICE="0"
 fi
 echo ""
-
-
-INIT_NUM_NODES="$INIT_NUM_NODES"
-INIT_OS_SIZE="$INIT_OS_SIZE"
-INIT_DATA_SIZE="$INIT_DATA_SIZE"
-INIT_NUM_DATA_VOL="$INIT_NUM_DATA_VOL"
-INIT_SEC_GROUP="$INIT_SEC_GROUP"
-INIT_INST_TYPE="$INIT_INST_TYPE"
-INIT_ZONE="$INIT_ZONE"
-INIT_IMG="$INIT_IMG"
-INIT_TEMP_PRICE="$INIT_TEMP_PRICE"
-
-
-
-
-
 
 
 touch $PLATFORM_CONF
@@ -120,16 +114,20 @@ PLAT_CMD="$PLAT_CMD"
 PLAT_VER="$PLAT_VER"
 
 #INIT NODE INFO
-INIT_NUM_NODES="$INIT_NUM_NODES"
-INIT_OS_SIZE="$INIT_OS_SIZE"
+INIT_MASTER_NUM_NODES="$INIT_MASTER_NUM_NODES"
+INIT_WORKER_NUM_NODES="$INIT_WORKER_NUM_NODES"
+INIT_MASTER_OS_SIZE="$INIT_MASTER_OS_SIZE"
+INIT_WORKER_OS_SIZE="$INIT_WORKER_OS_SIZE"
 INIT_DATA_SIZE="$INIT_DATA_SIZE"
 INIT_NUM_DATA_VOL="$INIT_NUM_DATA_VOL"
 INIT_SEC_GROUP="$INIT_SEC_GROUP"
-INIT_INST_TYPE="$INIT_INST_TYPE"
+INIT_INST_MASTER_TYPE="$INIT_INST_MASTER_TYPE"
+INIT_INST_WORKER_TYPE="$INIT_INST_WORKER_TYPE"
 INIT_ZONE="$INIT_ZONE"
 INIT_IMG="$INIT_IMG"
-INIT_TEMP_PRICE="$INIT_TEMP_PRICE"
-
+INIT_TEMP_MASTER_PRICE="$INIT_TEMP_MASTER_PRICE"
+INIT_TEMP_WORKER_PRICE="$INIT_TEMP_WORKER_PRICE"
+AWS_CMD="aws"
 
 #Nodes are ; sep, name,intip,extip,;name,initip,extip
 NODES=""

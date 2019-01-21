@@ -1,0 +1,51 @@
+#!/bin/bash
+
+#
+# Create all the certificates for the bootstrapped K8s Cluster
+#
+
+sourceconf "$PLATFORM_CONF"
+sourceconf "$CA_CONF"
+sourceconf "$K8S_CONF"
+sourceconf "$PREP_CONF"
+function _genenc(){
+
+    if [ -d "./conf/k8s" ]; then
+        @go.log WARN "Skipper"
+#        @go.log FATAL "./conf/k8s already exists exiting"
+    fi
+    if [ "$ENCRYPTION_KEY" != "" ]; then
+        @go.log FATAL "Encryption key already exists in k8s.conf - exiting"
+    fi
+    ENCRYPTION_KEY=$(head -c 32 /dev/urandom | base64)
+    echo "ENCRYPTION_KEY=${ENCRYPTION_KEY}" >> ./conf/k8s.conf
+
+
+
+cat > ./conf/k8s/admin/encryption-config.yaml <<EOF
+kind: EncryptionConfig
+apiVersion: v1
+resources:
+  - resources:
+      - secrets
+    providers:
+      - aescbc:
+          keys:
+            - name: key1
+              secret: ${ENCRYPTION_KEY}
+      - identity: {}
+EOF
+
+    echo ""
+    for I in $(echo -n "$MASTER_NODES_EXT_IP"|tr "," " "); do
+        scp -i ./conf/iuser.key ./conf/k8s/admin/encryption-config.yaml zetaadm@${I}:/opt/k8s/conf/
+    done
+
+
+}
+
+
+
+
+_genenc "$@"
+

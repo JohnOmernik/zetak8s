@@ -3,22 +3,36 @@
 # Create conf file for initial K8s installation
 #
 
-echo ""
-echo "Gather Information about the CA for Secure Communication"
-echo "This information will be the info on the CA and the default provided for certifications as well"
-echo "---------------"
-read -e -p "Please enter the CA Country (C): " -i "US" CA_C
-echo ""
-read -e -p "Please enter the CA State (ST): " -i "WI" CA_ST
-echo ""
-read -e -p "Please enter the CA Location (L): " -i "Madison" CA_L
-echo ""
-read -e -p "Please enter the CA Organization (O): " -i "K8s" CA_O
-echo ""
-read -e -p "Please enter the CA Oranizational Unit (OU): " -i "CA" CA_OU
-echo ""
-read -e -p "Please enter the CA Common Name (CN): " -i "zetak8s" CA_CN
-echo ""
+
+UNATTEND=$1
+echo "UNATTEND: $UNATTEND"
+
+if [ "$UNATTEND" == "1" ]; then
+    echo "Using default certs (used for testing only)"
+    CA_C="US"
+    CA_ST="WI"
+    CA_L="Madison"
+    CA_O="K8s"
+    CA_OU="CA"
+    CA_CN="zetak8s"
+else
+    echo ""
+    echo "Gather Information about the CA for Secure Communication"
+    echo "This information will be the info on the CA and the default provided for certifications as well"
+    echo "---------------"
+    read -e -p "Please enter the CA Country (C): " -i "US" CA_C
+    echo ""
+    read -e -p "Please enter the CA State (ST): " -i "WI" CA_ST
+    echo ""
+    read -e -p "Please enter the CA Location (L): " -i "Madison" CA_L
+    echo ""
+    read -e -p "Please enter the CA Organization (O): " -i "K8s" CA_O
+    echo ""
+    read -e -p "Please enter the CA Oranizational Unit (OU): " -i "CA" CA_OU
+    echo ""
+    read -e -p "Please enter the CA Common Name (CN): " -i "zetak8s" CA_CN
+    echo ""
+fi
 CA_ALGO="rsa"
 CA_KEYSIZE="4096"
 echo ""

@@ -7,6 +7,7 @@
 sourceconf "$PLATFORM_CONF"
 sourceconf "$CA_CONF"
 sourceconf "$K8S_CONF"
+sourceconf "$PREP_CONF"
 function _initk8scerts(){
 
     MYWD=$(pwd)
@@ -15,17 +16,31 @@ function _initk8scerts(){
         echo "CA not created please run ./zeta ca create ca"
         exit 1
     fi
-    ret_init_inst "SPOT_INSTS"
+    ret_init_inst "master" "MASTER_SPOT_INSTS"
+    ret_init_inst "worker" "WORKER_SPOT_INSTS"
 
-    if [ "$SPOT_INSTS" == "" ]; then
-        @go.log FATAL "No Noes running exiting"
+    if [ "$MASTER_SPOT_INSTS" == "" ]; then
+        @go.log FATAL "No Master Nodes running exiting"
     fi
-    ret_init_ips "INST_STR" "$SPOT_INSTS" 1
-    if [ "$INST_STR" == "" ]; then
-        @go.log FATAL "No output from status: exiting"
+    if [ "$WORKER_SPOT_INSTS" == "" ]; then
+        @go.log FATAL "No Worker Nodes running exiting"
+    fi
+    ret_init_ips "MASTER_INST_STR" "$MASTER_SPOT_INSTS" 1
+    if [ "$MASTER_INST_STR" == "" ]; then
+        @go.log FATAL "No output from master status: exiting"
+    fi
+    ret_init_ips "WORKER_INST_STR" "$WORKER_SPOT_INSTS" 1
+    if [ "$WORKER_INST_STR" == "" ]; then
+        @go.log FATAL "No output from worker status: exiting"
     fi
 
-    INST_STR=$(echo "$INST_STR"|tr ";" " ")
+
+
+    if [ "$LBDNS" == "" ]; then
+        @go.log FATAL "No LBDNS found in k8s.conf, ensure you have a LB running before running this script"
+    fi
+    MASTER_INST_STR=$(echo "$MASTER_INST_STR"|tr ";" " ")
+    WORKER_INST_STR=$(echo "$WORKER_INST_STR"|tr ";" " ")
 
     echo ""
     echo "-----------------------------------"
@@ -40,7 +55,7 @@ function _initk8scerts(){
     echo ""
     for WN in $(echo "$WORKER_NODES"|tr "," " "); do
         WN_INST=""
-        for INST in $INST_STR; do
+        for INST in $WORKER_INST_STR; do
             T=$(echo "$INST"|grep "$WN")
             if [ "$T" != "" ]; then
                 WN_INST="$INST"
@@ -50,7 +65,15 @@ function _initk8scerts(){
         EXT_IP=$(echo "$WN_INST"|cut -d"," -f4)
         HNAMES="$WN,$INT_IP,$EXT_IP"
         ./zeta ca createcert -u -cn="$WN" -cncert="system:node:$WN" -o="system:nodes" -h="$HNAMES"
+        scp -i ./conf/iuser.key ./conf/ca/certs/${WN}.pem ./conf/ca/keys/${WN}-key.pem ./conf/ca/ca.pem ${IUSER}@${EXT_IP}:/opt/k8s/certs
     done
+
+    echo ""
+    echo "-----------------------------------"
+    echo "Creating Controller Manager Cert"
+    echo "-----------------------------------"
+    echo ""
+    ./zeta ca createcert -u -cn="kube-controller-manager" -cncert="system:kube-controller-manager" -o="system:kube-controller-manager"
 
     echo ""
     echo "-----------------------------------"
@@ -60,14 +83,35 @@ function _initk8scerts(){
     ./zeta ca createcert -u -cn="kube-proxy" -cncert="system:kube-proxy" -o="system:nodes"
     echo ""
     echo "-----------------------------------"
+    echo "Creating Scheduler Certificate"
+    echo "-----------------------------------"
+    echo ""
+    ./zeta ca createcert -u -cn="kube-scheduler" -cncert="system:kube-scheduler" -o="system:kube-scheduler"
+    echo ""
+    echo "-----------------------------------"
+    echo "Creating Service Account Key-Pair Certificate"
+    echo "-----------------------------------"
+    echo ""
+    ./zeta ca createcert -u -cn="service-account" -cncert="service-accounts" -o="Kubernetes"
+    echo ""
+    echo "-----------------------------------"
     echo "Creating External API Certificate"
     echo "-----------------------------------"
     echo ""
-    EXT_HOSTS="127.0.0.1,kubernetes.default,${ALL_NODES_EXT_IP},${ALL_NODES_INT_IP}"
     echo ""
-    ./zeta ca createcert -u -cn="kubernetes" -o="kubernetes" -h="$EXT_HOSTS"
+    SERVER_IP="10.32.0.1"
+    echo "Warning: Service IP is added to cert but it's hard coded to 10.32.0.1. I think this is the first IP in $K8S_CIDR_SERVICE but it's not calculate and more research is needed"
+    echo ""
 
-
+    EXT_HOSTS="${SERVER_IP},127.0.0.1,kubernetes.default,${LBDNS},${ALL_NODES_INT_IP}"
+    echo ""
+    ./zeta ca createcert -u -cn="kubernetes" -o="kubernetes" -h="${EXT_HOSTS}"
+    echo ""
+    echo "Copying Appropriate Certs to Master Nodes"
+    echo ""
+    for N in $(echo -n "$MASTER_NODES_EXT_IP"|tr "," " "); do
+        scp -i ./conf/iuser.key ./conf/ca/ca.pem ./conf/ca/ca-key.pem ./conf/ca/keys/kubernetes-key.pem ./conf/ca/certs/kubernetes.pem ./conf/ca/keys/service-account-key.pem ./conf/ca/certs/service-account.pem ${IUSER}@${N}:/opt/k8s/certs
+    done
 }
 _initk8scerts "$@"
 

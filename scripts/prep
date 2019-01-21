@@ -13,12 +13,15 @@
 function _prep() {
 
     LOCK="0"
-
+    UNATTEND="0"
     for i in "$@"
     do
     case $i in
         -l|--lockconf)
         LOCK="1"
+        ;;
+        -u)
+        UNATTEND="1"
         ;;
         *)
             # unknown option
@@ -26,7 +29,7 @@ function _prep() {
     esac
     done
 
-    initconf "$PREP_CONF"
+    initconf "$PREP_CONF" "$UNATTEND"
 
     echo "Commands to use with prep:"
     echo ""
@@ -40,10 +43,6 @@ function _prep() {
     echo "To lock or unlock the prep config:"
     echo "./zeta prep -l"
     echo ""
-    echo ""
-    echo "To log into the initial node, please use:"
-    echo ""
-    echo "ssh -i $OUT_KEY ${IUSER}@$INIT_NODE"
     echo ""
 
     if [ "$LOCK" == "1" ]; then

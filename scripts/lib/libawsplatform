@@ -1,13 +1,17 @@
 #!/bin/bash
 #
 # libawsplatform - Library scripts to define out functions for aws
-#
+  #
 # plat_install - install the command line tools for the platform
 DEFAULT_PLAT_USERS="ubuntu centos"
 DEFAULT_PLAT_NETWORK="eth0"
-DEFAULT_PLAT_CMD="aws"
+DEFAULT_PLAT_CMD="$AWS_CMD"
 DEFAULT_PLAT_VER="--version"
-DEFAULT_INST_TYPE="t2.xlarge"
+DEFAULT_INST_MASTER_TYPE="m5.2xlarge"
+DEFAULT_INST_MASTER_SPOT_PRICE="0.18"     # 0.384 Full Price
+DEFAULT_INST_WORKER_TYPE="m5.4xlarge"
+DEFAULT_INST_WORKER_SPOT_PRICE="0.30"     # 0.768 Full Price
+
 DEFAULT_ZONE="us-west-2c"
 DEFAUT_IMG="ami-4e79ed36" # Ubuntu 16.04
 
@@ -28,6 +32,193 @@ function plat_install(){
 
 }
 
+    
+# Delete Network LB
+
+function delete_network_lb(){
+    local LB_ARN=$1
+    local RESULT=$2
+    DELETE_LB_RESULT=$(${AWS_CMD} elbv2 delete-load-balancer --load-balancer-arn $LB_ARN)
+    if [ "$?" == "0" ]; then
+        MYRESULT="0"
+    else
+        echo ""
+        echo "$DELETE_LB_RESULT"
+        echo ""
+        MYRESULT="1"
+    fi
+    eval $RESULT="'$MYRESULT'"
+}
+
+# Delete Network LB Target Group
+
+function delete_network_lb_tg(){
+    local TG_ARN=$1
+    local RESULT=$2
+    DELETE_LB_TG_RESULT=$(${AWS_CMD} elbv2 delete-target-group --target-group-arn $TG_ARN)
+    if [ "$?" == "0" ]; then
+        MYRESULT="0"
+    else
+        echo ""
+        echo "$DELETE_LB_TG_RESULT"
+        echo ""
+        MYRESULT="1"
+    fi
+    eval $RESULT="'$MYRESULT'"
+}
+
+# Create LB Listener
+
+
+function create_network_lb_listener(){
+    local LB_ARN=$1
+    local LB_PROT=$2
+    local LB_PORT=$3
+    local TG_ARN=$4
+    local LB_LIST_ARN=$5
+    local RESULT=$6
+
+    echo "Registering Listener for LB $LB_ARN on $LB_PROT - $LB_PORT for Target Group $TG_ARN"
+    CREATE_LB_LISTENER_RESULTS=$(${AWS_CMD} elbv2 create-listener --load-balancer-arn $LB_ARN --protocol ${LB_PROT} --port ${LB_PORT}  --default-actions Type=forward,TargetGroupArn=$TG_ARN)
+    if [ "$?" == "0" ]; then
+        MYRESULT="0"
+        LISTENERARN=$(echo "$CREATE_LB_LISTENER_RESULTS"|jq -r ".Listeners[]|.ListenerArn")
+        eval $LB_LIST_ARN="'$LISTENERARN'"
+    else
+        echo ""
+        echo "$CREATE_LB_LISTENER_RESULTS"
+        echo ""
+        MYRESULT="1"
+    fi
+    eval $RESULT="'$MYRESULT'"
+
+
+}
+
+
+# Register Targets in Target Group
+
+function register_lb_targets(){
+    local TG_ARN=$1
+    local TG_INSTS=$2
+    local RESULT=$3
+
+    echo ""
+    echo "Registering targets $TG_INSTS in Target Group $TG_ARN"
+    CREATE_TG_INSTS_RESULTS=$(${AWS_CMD} elbv2 register-targets --target-group-arn $TG_ARN --targets $TG_INSTS)
+    if [ "$?" == "0" ]; then
+        MYRESULT="0"
+    else
+        echo ""
+        echo  "$CREATE_TG_INSTS_RESULTS"
+        echo ""
+        MYRESULT="1"
+    fi
+    eval $RESULT="'$MYRESULT'"
+
+}
+
+
+# Create Target Groups
+function create_network_lb_targetgroup(){
+    local LB_NAME=$1
+    local LB_VPC=$2
+    local LB_PROT=$3
+    local LB_PORT=$4
+    local TG_ARN=$5
+    local RESULT=$6
+
+
+ # Create a Target group
+    echo "Creating Target group for ${LB_NAME}-targets protocol: $LB_PROT port $LB_PORT on VPC $LB_VPC"
+    CREATE_TG_RESULTS=$(${AWS_CMD} elbv2 create-target-group --name $LB_NAME-targets --protocol $LB_PROT --port $LB_PORT --vpc-id $LB_VPC)
+    if [ "$?" == "0" ]; then
+        MYRESULT="0"
+        TGARN=$(echo "$CREATE_TG_RESULTS"|jq -r ".TargetGroups[]|.TargetGroupArn")
+    else
+        echo ""
+        echo "$CREATE_TG_RESULTS"
+        echo ""
+        MYRESULT="1"
+    fi
+    eval $TG_ARN="'$TGARN'"
+    eval $RESULT="'$MYRESULT'"
+
+
+}
+#   aws elbv2 create-target-group --name funtime-targets --protocol TCP --port 6443 --vpc-id vpc-ce58bbab
+#{
+#    "TargetGroups": [
+#        {
+#            "VpcId": "vpc-ce58bbab",
+#            "HealthCheckTimeoutSeconds": 10,
+#            "TargetGroupArn": "arn:aws:elasticloadbalancing:us-west-2:793246819526:targetgroup/funtime-targets/5a330318f40454b6",
+#            "HealthCheckProtocol": "TCP",
+#            "HealthCheckIntervalSeconds": 30,
+#            "UnhealthyThresholdCount": 3,
+#            "HealthCheckPort": "traffic-port",
+#            "Protocol": "TCP",
+#            "HealthyThresholdCount": 3,
+#            "Port": 6443,
+#            "TargetGroupName": "funtime-targets",
+#            "TargetType": "instance"
+#        }
+#    ]
+#}
+function create_network_lb(){
+    local LB_NAME=$1
+    local LB_SNID=$2
+    local LB_ARN=$3
+    local LB_DNS=$4
+    local LB_VPC=$5
+    local RESULT=$6
+    echo "Creating LB $LB_NAME in subnet $SNID"
+    CREATE_LB_RESULTS=$(${AWS_CMD} elbv2 create-load-balancer --name $LB_NAME --type network --subnets $LB_SNID)
+    if [ "$?" == "0" ]; then
+        MYRESULT="0"
+        LB_RES=$(echo "$CREATE_LB_RESULTS"|jq -r ".LoadBalancers[]|.LoadBalancerArn + \" \" + .DNSName + \" \" + .VpcId")
+        LBARN=$(echo "$LB_RES"|cut -d" " -f1)
+        LBDNS=$(echo "$LB_RES"|cut -d" " -f2)
+        LBVPC=$(echo "$LB_RES"|cut -d" " -f3)
+        eval $LB_ARN="'$LBARN'"
+        eval $LB_DNS="'$LBDNS'"
+        eval $LB_VPC="'$LBVPC'"
+
+    else
+        echo "Error"
+        echo "$CREATE_LB_RESULTS"
+        echo ""
+        MYRESULT="1"
+    fi
+    eval $RESULT="'$MYRESULT'"
+}
+#    aws elbv2 create-load-balancer --name funtime --type network --subnets subnet-a6281ce0
+# use DNS Name for Certificate
+#{
+#    "LoadBalancers": [
+#        {
+#            "State": {
+#                "Code": "provisioning"
+#            },
+#            "LoadBalancerArn": "arn:aws:elasticloadbalancing:us-west-2:793246819526:loadbalancer/net/funtime/4e0a1c01ddcc8d10",
+#            "CanonicalHostedZoneId": "Z18D5FSROUN65G",
+#            "IpAddressType": "ipv4",
+#            "LoadBalancerName": "funtime",
+#            "Scheme": "internet-facing",
+#            "VpcId": "vpc-ce58bbab",
+#            "DNSName": "funtime-4e0a1c01ddcc8d10.elb.us-west-2.amazonaws.com",
+#            "Type": "network",
+#            "AvailabilityZones": [
+#                {
+#                    "ZoneName": "us-west-2c",
+#                    "SubnetId": "subnet-a6281ce0"
+#                }
+#            ],
+#            "CreatedTime": "2018-04-29T21:10:29.040Z"
+#        }
+#    ]
+#}
+
 
 function test_plat(){
     echo "Hey it looks like the AWS libawsplatform has been imported correctly!"
@@ -35,9 +226,11 @@ function test_plat(){
 
 
 function ret_init_inst(){
-    local RESULT=$1
-    if [ -f ./bin/init_output.json ]; then
-        INST_OUT=$(cat ./bin/init_output.json)
+    local INSTTYPE=$1
+    local RESULT=$2
+
+    if [ -f ./bin/${INSTTYPE}_init_output.json ]; then
+        INST_OUT=$(cat ./bin/${INSTTYPE}_init_output.json)
         SPOT_INSTS=""
         for X in $(echo "$INST_OUT"|jq  -r ".SpotInstanceRequests[] | .SpotInstanceRequestId"); do
             if [ "$SPOT_INSTS" == "" ]; then
@@ -52,41 +245,27 @@ function ret_init_inst(){
     eval $RESULT="'$SPOT_INSTS'"
 }
 
-function ret_vpc_by_instance_id(){
-    local INSTANCE_ID=$1
-    local VID=$2
-    INSTS=$(aws ec2 describe-instances)
-    INST_DATA=$(echo "$INSTS"|jq -r ".Reservations[]|.Instances[]|.InstanceId + \" \" + .SpotInstanceRequestId + \" \" + .PrivateIpAddress + \" \" + .PublicIpAddress + \" \" + .VpcId")
-    OUTVPC=""
-    for INST in $INST_DATA; do
-        INST_ID=$(echo "$IDATA"|cut -d" " -f1)
-        INTERNAL_IP=$(echo "$IDATA"|cut -d" " -f3)
-        EXTERNAL_IP=$(echo "$IDATA"|cut -d" " -f4)
-        VPC_ID=$(echo "$IDATA"|cut -d" " -f5)
-        if [ "$INST_ID" == "$INSTANCE_ID" ]; then
-            OUTVPC="$VPC_ID"
-        fi
-    done
-    eval $SCID="'$OUTVPC'"
-}
 
-
-function ret_subnet_by_instance_id(){
-    local INSTANCE_ID=$1
-    local SID=$2
-    INSTS=$(aws ec2 describe-instances)
-    INST_DATA=$(echo "$INSTS"|jq -r ".Reservations[]|.Instances[]|.InstanceId + \" \" + .SpotInstanceRequestId + \" \" + .PrivateIpAddress + \" \" + .PublicIpAddress + \" \" + .SubnetId")
+function ret_instance_data_by_internal_ip(){
+    local IP=$1
+    local IID=$2
+    local SID=$3
+    INSTS=$(${AWS_CMD} ec2 describe-instances)
+    INST_DATA=$(echo "$INSTS"|jq -r ".Reservations[]|.Instances[]|.InstanceId + \"~\" + .SpotInstanceRequestId + \"~\" + .PrivateIpAddress + \"~\" + .PublicIpAddress + \"~\" + .SubnetId")
     OUTSUB=""
+    OUTINST=""
     for INST in $INST_DATA; do
-        INST_ID=$(echo "$IDATA"|cut -d" " -f1)
-        INTERNAL_IP=$(echo "$IDATA"|cut -d" " -f3)
-        EXTERNAL_IP=$(echo "$IDATA"|cut -d" " -f4)
-        SUB_ID=$(echo "$IDATA"|cut -d" " -f5)
-        if [ "$INST_ID" == "$INSTANCE_ID" ]; then
+        INST_ID=$(echo "$INST"|cut -d"~" -f1)
+        INTERNAL_IP=$(echo "$INST"|cut -d"~" -f3)
+        EXTERNAL_IP=$(echo "$INST"|cut -d"~" -f4)
+        SUB_ID=$(echo "$INST"|cut -d"~" -f5)
+        if [ "$IP" == "$INTERNAL_IP" ]; then
             OUTSUB="$SUB_ID"
+            OUTINST="$INST_ID"
         fi
     done
     eval $SID="'$OUTSUB'"
+    eval $IID="'$OUTINST'"
 }
 
 function ret_init_ips() {
@@ -95,7 +274,7 @@ function ret_init_ips() {
     local NOOUTPUT=$3
 
 
-    INSTS=$(aws ec2 describe-instances)
+    INSTS=$(${AWS_CMD} ec2 describe-instances)
     INST_DATA=$(echo "$INSTS"|jq -r ".Reservations[]|.Instances[]|.InstanceId + \" \" + .SpotInstanceRequestId + \" \" + .PrivateIpAddress + \" \" + .PublicIpAddress")
 
         #Nodes are ; sep, instid,spotid,intip,extip,hname;instid,spotid,initip,extip,hname
@@ -152,33 +331,55 @@ function ret_init_ips() {
 }
 
 function write_spec_json(){
+    local INSTTYPE=$1
     DRIVES="b c d e f g h i j k l m n o p q r s t u v w x y z"
     OUTDRIVE=""
-    OS_DRIVE="{ \"DeviceName\": \"/dev/sda1\", \"Ebs\": { \"VolumeSize\": $INIT_OS_SIZE } },"
+
+    if [ "$INSTTYPE" == "worker" ]; then
+        OS_SIZE="${INIT_WORKER_OS_SIZE}"
+        INST_TYPE="${INIT_INST_WORKER_TYPE}"
+    else
+        OS_SIZE="${INIT_MASTER_OS_SIZE}"
+        INST_TYPE="${INIT_INST_MASTER_TYPE}"
+    fi
+    OS_DRIVE="{ \"DeviceName\": \"/dev/sda1\", \"Ebs\": { \"VolumeSize\": $OS_SIZE } },"
     OUTDRIVE="$OS_DRIVE"$'\n'
-    DCOUNT=0
-    for X in $DRIVES; do
-        if [ "$DCOUNT" -lt "$INIT_NUM_DATA_VOL" ]; then
-            OUTDRIVE="$OUTDRIVE{ \"DeviceName\": \"/dev/sd$X\", \"Ebs\": { \"VolumeSize\": $INIT_DATA_SIZE } },"$'\n'
-        fi
-        DCOUNT=$(( $DCOUNT + 1 ))
-    done
+
+    if [ "$INSTTYPE" == "worker" ]; then
+        DCOUNT=0
+        for X in $DRIVES; do
+            if [ "$DCOUNT" -lt "$INIT_NUM_DATA_VOL" ]; then
+                OUTDRIVE="$OUTDRIVE{ \"DeviceName\": \"/dev/sd$X\", \"Ebs\": { \"VolumeSize\": $INIT_DATA_SIZE } },"$'\n'
+            fi
+            DCOUNT=$(( $DCOUNT + 1 ))
+        done
+    fi
     OUTDRIVE=$(echo -n "$OUTDRIVE"|tr '\n' '~'|sed "s/,~$//"|tr "~" "\n")
-    echo "Outputting specifications to ./bin/specifification.json"
-cat > ./bin/specification.json << EOF
+
+    echo "Outputting specifications to ./bin/${INSTTYPE}_specifification.json"
+
+    INIT_OUT=""
+    if [ "$INIT_ZONE" != "ANY" ]; then
+        INIT_OUT="${INIT_OUT}  \"Placement\": {"$'\n'
+        INIT_OUT="${INIT_OUT}    \"AvailabilityZone\": \"${INIT_ZONE}\""$'\n'
+        INIT_OUT="${INIT_OUT}  },"$'\n'
+    else
+        INIT_OUT=""
+    fi
+
+
+
+cat > ./bin/${INSTTYPE}_specification.json << EOF
 {
   "ImageId": "$INIT_IMG",
   "KeyName": "$INIT_KEY_NAME",
   "SecurityGroupIds": [ "$INIT_SEC_GROUP" ],
-  "InstanceType": "$INIT_INST_TYPE",
-  "Placement": {
-    "AvailabilityZone": "$INIT_ZONE"
-  },
+  "InstanceType": "${INST_TYPE}",
+${INIT_OUT}
   "BlockDeviceMappings": [
     $OUTDRIVE
   ]
 }
 EOF
-
 
 }

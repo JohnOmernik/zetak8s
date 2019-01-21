@@ -1,0 +1,133 @@
+#!/bin/bash
+
+#
+# Craete a etcd installation
+#
+#
+sourceconf "$PLATFORM_CONF"
+sourceconf "$CA_CONF"
+sourceconf "$K8S_CONF"
+sourceconf "$PREP_CONF"
+
+function _etcdinstall(){
+    ret_init_inst "master" "MASTER_SPOT_INSTS"
+    ret_init_inst "worker" "WORKER_SPOT_INSTS"
+
+    if [ "$MASTER_SPOT_INSTS" == "" ]; then
+        @go.log FATAL "No Master Nodes running exiting"
+    fi
+    if [ "$WORKER_SPOT_INSTS" == "" ]; then
+        @go.log FATAL "No Worker Nodes running exiting"
+    fi
+    ret_init_ips "MASTER_INST_STR" "$MASTER_SPOT_INSTS" 1
+    if [ "$MASTER_INST_STR" == "" ]; then
+        @go.log FATAL "No output from master status: exiting"
+    fi
+    ret_init_ips "WORKER_INST_STR" "$WORKER_SPOT_INSTS" 1
+    if [ "$WORKER_INST_STR" == "" ]; then
+        @go.log FATAL "No output from worker status: exiting"
+    fi
+
+    MASTER_INST_STR=$(echo "$MASTER_INST_STR"|tr ";" " ")
+    WORKER_INST_STR=$(echo "$WORKER_INST_STR"|tr ";" " ")
+
+    ETCD_DL_CMD="wget --no-verbose --https-only --timestamping $ETCD_URL"
+    ETCD_PERM_DIR_CMD="sudo mkdir -p /opt/etcd && sudo mkdir -p /opt/etcd/conf && sudo mkdir -p /opt/etcd/var/lib && sudo chown -R ${IUSER}:root /opt/etcd && sudo chmod -R 770 /opt/etcd"
+    ETCD_UNTAR_CMD="tar zxf $ETCD_FILE && sudo mv $ETCD_DIR /opt/etcd && rm $ETCD_FILE"
+    ETCD_LN_CMD="sudo ln -s /opt/etcd/${ETCD_DIR}/etcd /usr/local/bin/etcd && sudo ln -s /opt/etcd/${ETCD_DIR}/etcdctl /usr/local/bin/etcdctl && sudo chmod +x /opt/etcd/${ETCD_DIR}/etcd && sudo chmod +x /opt/etcd/${ETCD_DIR}/etcdctl"
+    ETCD_START_CMD="sudo systemctl daemon-reload && sudo systemctl enable etcd && sudo systemctl start etcd"
+
+    INIT_CLUSTER_STR=""
+    K8S_ETCD_CLUSTER_STR=""
+    for M in $(echo "$MASTER_NODES"|tr "," " "); do
+        for INST in $MASTER_INST_STR; do 
+            T=$(echo "$INST"|grep "$M")
+            if [ "$T" != "" ]; then
+                INT_IP=$(echo "$INST"|cut -d"," -f3)
+                EXT_IP=$(echo "$INST"|cut -d"," -f4)
+            fi
+        done
+        if [ "$INIT_CLUSTER_STR" == "" ]; then
+            INIT_CLUSTER_STR="${M}=https://${INT_IP}:2380"
+            K8S_ETCD_CLUSTER_STR="https://${INT_IP}:2379"
+        else
+            INIT_CLUSTER_STR="${INIT_CLUSTER_STR},${M}=https://${INT_IP}:2380"
+            K8S_ETCD_CLUSTER_STR="${K8S_ETCD_CLUSTER_STR},https://${INT_IP}:2379"
+        fi
+    done
+
+    echo "K8S_ETCD_CLUSTER=\"${K8S_ETCD_CLUSTER_STR}\"" >> $K8S_CONF
+
+
+    for M in $(echo "$MASTER_NODES"|tr "," " "); do
+        for INST in $MASTER_INST_STR; do 
+            T=$(echo "$INST"|grep "$M")
+            if [ "$T" != "" ]; then
+                INT_IP=$(echo "$INST"|cut -d"," -f3)
+                EXT_IP=$(echo "$INST"|cut -d"," -f4)
+            fi
+        done
+cat > ./conf/k8s/admin/etcd-${M}.service << EOF
+[Unit]
+Description=etcd
+Documentation=https://github.com/coreos
+
+[Service]
+ExecStart=/usr/local/bin/etcd \\
+  --name ${M} \\
+  --cert-file=/opt/k8s/certs/kubernetes.pem \\
+  --key-file=/opt/k8s/certs/kubernetes-key.pem \\
+  --peer-cert-file=/opt/k8s/certs/kubernetes.pem \\
+  --peer-key-file=/opt/k8s/certs/kubernetes-key.pem \\
+  --trusted-ca-file=/opt/k8s/certs/ca.pem \\
+  --peer-trusted-ca-file=/opt/k8s/certs/ca.pem \\
+  --peer-client-cert-auth \\
+  --client-cert-auth \\
+  --initial-advertise-peer-urls https://${INT_IP}:2380 \\
+  --listen-peer-urls https://${INT_IP}:2380 \\
+  --listen-client-urls https://${INT_IP}:2379,https://127.0.0.1:2379 \\
+  --advertise-client-urls https://${INT_IP}:2379 \\
+  --initial-cluster-token etcd-cluster-0 \\
+  --initial-cluster ${INIT_CLUSTER_STR} \\
+  --initial-cluster-state new \\
+  --data-dir=/opt/etcd/var/lib/etcd
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+        @go.log INFO "Running Install of ETCD on $M"
+        echo ""
+        @go.log INFO "Downloading"
+        echo ""
+        ssh -i $OUT_KEY ${IUSER}@${EXT_IP} "$ETCD_DL_CMD"
+        echo ""
+        @go.log INFO "Setting Permissions"
+        echo ""
+        ssh -i $OUT_KEY ${IUSER}@${EXT_IP} "$ETCD_PERM_DIR_CMD"
+        echo ""
+        @go.log INFO "Unpacking"
+        echo ""
+        ssh -i $OUT_KEY ${IUSER}@${EXT_IP} "$ETCD_UNTAR_CMD"
+        echo ""
+        @go.log INFO "Linking"
+        echo ""
+        ssh -i $OUT_KEY ${IUSER}@${EXT_IP} "$ETCD_LN_CMD"
+        echo ""
+        @go.log INFO "Copying Config and setting systemd service file"
+        echo ""
+        scp -i $OUT_KEY ./conf/k8s/admin/etcd-${M}.service ${IUSER}@${EXT_IP}:/home/${IUSER}
+        ssh -i $OUT_KEY ${IUSER}@${EXT_IP} "mv /home/${IUSER}/etcd-${M}.service /opt/etcd/conf/etcd.service && sudo rm -rf /etc/systemd/system/etcd.service && sudo cp /opt/etcd/conf/etcd.service /etc/systemd/system/etcd.service"
+                echo ""
+        @go.log INFO "Starting Service"
+        echo ""
+        ssh -i $OUT_KEY ${IUSER}@${EXT_IP} $ETCD_START_CMD
+    done
+
+
+}
+_etcdinstall "$@"
+
+
+

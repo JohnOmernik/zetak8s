@@ -7,6 +7,10 @@
 # -v=$VERS  - Pass a vers version into the script -v=1.0.0 for example - This is optional
 #
 #
+sourceconf "$PREP_CONF"
+sourceconf "$PLATFORM_CONF"
+sourceconf "$K8S_CONF"
+sourceconf "$CA_CONF"
 
 function _displayhelp(){
     echo "createsystemprep - Creates scripts needed to update and upgrade nodes to prepe for Zeta Install"

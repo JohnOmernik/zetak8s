@@ -8,6 +8,9 @@
 #
 
 sourceconf "$PREP_CONF"
+sourceconf "$PLATFORM_CONF"
+sourceconf "$K8S_CONF"
+sourceconf "$CA_CONF"
 
 function _displayhelp(){
     echo "prep systemprep - Update system packages on Zeta nodes"
@@ -78,8 +81,11 @@ function _systemprep() {
     @go.log INFO "Connecing to and updating host $HOST"
 
     scp -o StrictHostKeyChecking=no -i ${OUT_KEY} ./bin/system_type.sh ${IUSER}@${HOST}:/home/${IUSER}/system_type.sh
+
     SYS_TYPE=$(ssh -i ${OUT_KEY} ${IUSER}@${HOST} "/home/${IUSER}/system_type.sh")
-    ssh -i ${OUT_KEY} ${IUSER}@${HOST} "$PRIV_CMD mkdir -p /root/scripts && $PRIV_CMD chown root:root /root/scripts && $PRIV_CMD chmod 700 /root/scripts"
+    scp -i ${OUT_KEY} ./conf/ca/ca.pem ${IUSER}@${HOST}:/home/${IUSER}/zetaca.pem
+    ssh -i ${OUT_KEY} ${IUSER}@${HOST} "$PRIV_CMD mkdir -p /root/scripts && $PRIV_CMD chown root:root /root/scripts && $PRIV_CMD chmod 700 /root/scripts && $PRIV_CMD mv /home/${IUSER}/zetaca.pem /root/scripts/zetaca.crt"
+
     @go.log INFO "System Type: $SYS_TYPE - Running Appropriate Scripts"
     if [ "$SYS_TYPE" == "ubuntu" ]; then
         scp -i ${OUT_KEY} ./bin/ubuntu_prep.sh ${IUSER}@${HOST}:/home/${IUSER}/ubuntu_prep.sh

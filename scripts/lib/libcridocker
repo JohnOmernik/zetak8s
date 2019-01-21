@@ -1,0 +1,20 @@
+### This is the cri install for docker (CRI)
+
+
+CRI_TOML=""
+CRI_RUNTIME=""
+CRI_RUNTIME_ENDPOINT=""
+#K8S_DL_CRI_CMD="sudo mkdir -p /etc/systemd/system/docker.service.d && echo \"[Service]\" | sudo tee /etc/systemd/system/docker.service.d/override.conf && echo \"ExecStart=\"|sudo tee -a  /etc/systemd/system/docker.service.d/override.conf && echo \"ExecStart=/usr/bin/docker daemon --storage-driver=overlay -H fd://\"|sudo tee -a /etc/systemd/system/docker.service.d/override.conf"
+
+K8S_DL_CRI_CMD="echo \"No DL CMD\""
+K8S_MV_CRI_CMD="curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add - && sudo apt-key fingerprint 0EBFCD88 && sudo add-apt-repository -y \"deb [arch=amd64] https://download.docker.com/linux/ubuntu \$(lsb_release -cs) stable\""
+K8S_LN_CRI_CMD="sudo apt-get update && sudo apt-get install -y docker-ce && echo \"Docker CE Installed\""
+
+
+# && sudo systemctl daemon-reload && sudo systemctl enable docker && sudo systemctl start docker"
+#K8S_LN_CRI_CMD="sudo iptables -t nat -F && sudo ip link set docker0 down && sudo ip link delete docker0"
+
+K8S_START_CRI_CMD="echo \"No Start CMD\""
+    
+K8S_SVC_REQUIRES=""
+K8S_SVC_AFTER=""

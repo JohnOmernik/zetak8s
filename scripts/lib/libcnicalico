@@ -1,0 +1,41 @@
+### This is the install for a Calico based CNI Network
+
+CNI_BASE="https://github.com/containernetworking/plugins/releases/download/v0.6.0"
+CNI_FILE="cni-plugins-amd64-v0.6.0.tgz"
+
+function installcniyaml(){
+
+
+    CNI_CALICO_YAML_URL="https://docs.projectcalico.org/v3.4/getting-started/kubernetes/installation/hosted/calico.yaml"
+    SRC_CNI_CALICO_YAML="calico.yaml"
+    CNI_CALICO_YAML="./conf/k8s/admin/calico.yaml"
+
+    wget --no-verbose ${CNI_CALICO_YAML_URL}
+    mv ${SRC_CNI_CALICO_YAML} ${CNI_CALICO_YAML}
+
+    sed -i "s@http://10.96.232.136:6666@$K8S_ETCD_CLUSTER@g" ${CNI_CALICO_YAML}
+    sed -i "s@etcd_ca: \"\"@etcd_ca: \"/calico-secrets/etcd-ca\"@g" ${CNI_CALICO_YAML}
+    sed -i "s@etcd_cert: \"\"@etcd_cert: \"/calico-secrets/etcd-cert\"@g" ${CNI_CALICO_YAML}
+    sed -i "s@etcd_key: \"\"@etcd_key: \"/calico-secrets/etcd-key\"@g" ${CNI_CALICO_YAML}
+
+    ETCD_CA=$(cat ./conf/ca/ca.pem|base64 -w 0)
+    ETCD_CERT=$(cat ./conf/ca/certs/kubernetes.pem|base64 -w 0)
+    ETCD_KEY=$(cat ./conf/ca/keys/kubernetes-key.pem|base64 -w 0)
+
+    sed -i "s@# etcd-key: null@etcd-key: $ETCD_KEY@g" ${CNI_CALICO_YAML}
+    sed -i "s@# etcd-cert: null@etcd-cert: $ETCD_CERT@g" ${CNI_CALICO_YAML}
+    sed -i "s@# etcd-ca: null@etcd-ca: $ETCD_CA@g" ${CNI_CALICO_YAML}
+
+    sed -i "s@192.168.0.0/16@10.244.0.0/16@g" ${CNI_CALICO_YAML}
+
+    sed -i "s@path: /opt/cni/bin@path: ${CNI_BIN_DIR}@g" ${CNI_CALICO_YAML}
+    sed -i "s@path: /etc/cni/net.d@path: ${CNI_CONF_DIR}@g" ${CNI_CALICO_YAML}
+
+    echo "Calico CNI Yaml downloaded, modified for your installation and saved to $CNI_CALICO_YAML"
+    echo ""
+
+    echo "Applying CNI Calico Yaml now"
+    ./bin/kubectl apply --kubeconfig ./conf/k8s/admin/admin_ext.kubeconfig -f $CNI_CALICO_YAML
+    echo ""
+
+}

@@ -1,0 +1,20 @@
+### This is the install for a Flannel based CNI Network
+
+CNI_BASE="https://github.com/containernetworking/plugins/releases/download/v0.7.4"
+CNI_FILE="cni-plugins-amd64-v0.7.4.tgz"
+
+
+function installcniyaml(){
+    SRC_CNI_YAML="kube-flannel.yml"
+    CNI_YAML="./conf/k8s/admin/kube-cni.yaml"
+    wget --no-verbose https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+    mv $SRC_CNI_YAML $CNI_YAML
+    
+#    sed -i "s/vxlan/host-gw/g" $CNI_YAML
+    sed -i "s@10\.244\.0\.0/16@$K8S_CIDR_POD@" $CNI_YAML
+
+    echo "Flannel SNI Yaml downloaded, modified for your installation and saved to $CNI_YAML"
+    echo ""
+    echo "Applying Yaml Now"
+    ./bin/kubectl apply --kubeconfig ./conf/k8s/admin/admin_ext.kubeconfig -f $CNI_YAML
+}

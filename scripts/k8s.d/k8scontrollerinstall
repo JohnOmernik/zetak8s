@@ -1,0 +1,207 @@
+#!/bin/bash
+
+#
+# Create a k8s controller installation
+#
+#
+sourceconf "$PLATFORM_CONF"
+sourceconf "$CA_CONF"
+sourceconf "$K8S_CONF"
+sourceconf "$PREP_CONF"
+
+function _k8scontrollerinstall(){
+    ret_init_inst "master" "MASTER_SPOT_INSTS"
+    ret_init_inst "worker" "WORKER_SPOT_INSTS"
+
+    if [ "$MASTER_SPOT_INSTS" == "" ]; then
+        @go.log FATAL "No Master Nodes running exiting"
+    fi
+    if [ "$WORKER_SPOT_INSTS" == "" ]; then
+        @go.log FATAL "No Worker Nodes running exiting"
+    fi
+    ret_init_ips "MASTER_INST_STR" "$MASTER_SPOT_INSTS" 1
+    if [ "$MASTER_INST_STR" == "" ]; then
+        @go.log FATAL "No output from master status: exiting"
+    fi
+    ret_init_ips "WORKER_INST_STR" "$WORKER_SPOT_INSTS" 1
+    if [ "$WORKER_INST_STR" == "" ]; then
+        @go.log FATAL "No output from worker status: exiting"
+    fi
+
+    MASTER_INST_STR=$(echo "$MASTER_INST_STR"|tr ";" " ")
+    WORKER_INST_STR=$(echo "$WORKER_INST_STR"|tr ";" " ")
+
+    K8S_MK_DIR_CMD="sudo mkdir -p ${K8S_BIN_DIR} && sudo mkdir -p ${K8S_DIR}/log && sudo mkdir -p ${K8S_DIR}/kublets-plugins/volume/exec && sudo mkdir -p ${K8S_DIR}/var/lib && sudo chown -R ${IUSER}:root ${K8S_DIR} && sudo chmod -R 775 ${K8S_BIN_DIR} && sudo chmod -R 770 ${K8S_DIR}/log && sudo chmod -R 770 ${K8S_DIR}/conf && sudo chmod -R 770 ${K8S_DIR}/certs && sudo chmod -R 770 ${K8S_DIR}/var"
+    K8S_DL_CMD="wget  --no-verbose --https-only --timestamping ${K8S_BASE}/kube-apiserver ${K8S_BASE}/kube-controller-manager ${K8S_BASE}/kube-scheduler ${K8S_BASE}/kubectl"
+    K8S_MV_CMD="mv kube-apiserver ${K8S_BIN_DIR}/ && mv kube-controller-manager ${K8S_BIN_DIR}/ && mv kube-scheduler ${K8S_BIN_DIR}/ && mv kubectl ${K8S_BIN_DIR}/ && sudo chmod +x ${K8S_BIN_DIR}/*"
+    K8S_LN_CMD="sudo ln -s ${K8S_BIN_DIR}/kube-apiserver /usr/local/bin/kube-apiserver && sudo ln -s ${K8S_BIN_DIR}/kube-controller-manager /usr/local/bin/kube-controller-manager && sudo ln -s ${K8S_BIN_DIR}/kube-scheduler /usr/local/bin/kube-scheduler && sudo ln -s ${K8S_BIN_DIR}/kubectl /usr/local/bin/kubectl"
+    K8S_CP_CMD="sudo cp /opt/k8s/conf/kube-api.service /etc/systemd/system/ && sudo cp /opt/k8s/conf/kube-controller.service /etc/systemd/system/ && sudo cp /opt/k8s/conf/kube-scheduler.service /etc/systemd/system/"
+    K8S_START_CMD="sudo systemctl daemon-reload && sudo systemctl enable kube-api && sudo systemctl enable kube-controller && sudo systemctl enable kube-scheduler && sudo systemctl start kube-api && sudo systemctl start kube-controller && sudo systemctl start kube-scheduler"
+
+    INIT_CLUSTER_STR=""
+    for M in $(echo "$MASTER_NODES"|tr "," " "); do
+        for INST in $MASTER_INST_STR; do
+            T=$(echo "$INST"|grep "$M")
+            if [ "$T" != "" ]; then
+                INT_IP=$(echo "$INST"|cut -d"," -f3)
+                EXT_IP=$(echo "$INST"|cut -d"," -f4)
+            fi
+        done
+        if [ "$INIT_CLUSTER_STR" == "" ]; then
+            INIT_CLUSTER_STR="https://${INT_IP}:2379"
+        else
+            INIT_CLUSTER_STR="${INIT_CLUSTER_STR},https://${INT_IP}:2379"
+        fi
+    done
+
+
+
+    for M in $(echo "$MASTER_NODES"|tr "," " "); do
+        echo "--------------------------------------------"
+        echo ""
+        @go.log INFO "Installing K8S Controller on $M"
+        echo ""
+        for INST in $MASTER_INST_STR; do
+            T=$(echo "$INST"|grep "$M")
+            if [ "$T" != "" ]; then
+                INT_IP=$(echo "$INST"|cut -d"," -f3)
+                EXT_IP=$(echo "$INST"|cut -d"," -f4)
+            fi
+        done
+        echo ""
+        @go.log INFO "Creating K8S bin Dir and setting permissions"
+        echo ""
+        ssh -i $OUT_KEY ${IUSER}@${EXT_IP} "$K8S_MK_DIR_CMD"
+        echo ""
+        @go.log INFO "Downloading K8S Version: $K8S_VER"
+        echo ""
+        ssh -i $OUT_KEY ${IUSER}@${EXT_IP} "$K8S_DL_CMD"
+        echo ""
+        @go.log INFO "Moving Binaries"
+        echo ""
+        ssh -i $OUT_KEY ${IUSER}@${EXT_IP} "$K8S_MV_CMD"
+        echo ""
+        @go.log INFO "Linking K8S binaries to /usr/local/bin"
+        echo ""
+        ssh -i $OUT_KEY ${IUSER}@${EXT_IP} "${K8S_LN_CMD}"
+        echo ""
+        @go.log INFO "Creating service and yaml files"
+        echo ""
+
+cat > ./conf/k8s/admin/kube-api-${M}.service << EOF
+[Unit]
+Description=Kubernetes API Server
+Documentation=https://github.com/kubernetes/kubernetes
+
+[Service]
+ExecStart=/usr/local/bin/kube-apiserver \\
+  --advertise-address=${INT_IP} \\
+  --allow-privileged=true \\
+  --apiserver-count=3 \\
+  --audit-log-maxage=30 \\
+  --audit-log-maxbackup=3 \\
+  --audit-log-maxsize=100 \\
+  --audit-log-path=${K8S_DIR}/log/audit.log \\
+  --authorization-mode=Node,RBAC \\
+  --bind-address=0.0.0.0 \\
+  --client-ca-file=${K8S_DIR}/certs/ca.pem \\
+  --enable-admission-plugins=Initializers,NamespaceLifecycle,NodeRestriction,LimitRanger,ServiceAccount,DefaultStorageClass,ResourceQuota \\
+  --enable-swagger-ui=true \\
+  --etcd-cafile=${K8S_DIR}/certs/ca.pem \\
+  --etcd-certfile=${K8S_DIR}/certs/kubernetes.pem \\
+  --etcd-keyfile=${K8S_DIR}/certs/kubernetes-key.pem \\
+  --etcd-servers=${INIT_CLUSTER_STR} \\
+  --event-ttl=1h \\
+  --experimental-encryption-provider-config=${K8S_DIR}/conf/encryption-config.yaml \\
+  --kubelet-certificate-authority=${K8S_DIR}/certs/ca.pem \\
+  --kubelet-client-certificate=${K8S_DIR}/certs/kubernetes.pem \\
+  --kubelet-client-key=${K8S_DIR}/certs/kubernetes-key.pem \\
+  --kubelet-https=true \\
+  --runtime-config=api/all \\
+  --service-account-key-file=${K8S_DIR}/certs/service-account.pem \\
+  --service-cluster-ip-range=${K8S_CIDR_SERVICE} \\
+  --service-node-port-range=${K8S_PORT_START_SERVICE}-${K8S_PORT_END_SERVICE} \\
+  --tls-cert-file=${K8S_DIR}/certs/kubernetes.pem \\
+  --tls-private-key-file=${K8S_DIR}/certs/kubernetes-key.pem \\
+  --v=2
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+
+cat > ./conf/k8s/admin/kube-controller-${M}.service << EOS
+[Unit]
+Description=Kubernetes Controller Manager
+Documentation=https://github.com/kubernetes/kubernetes
+
+[Service]
+ExecStart=/usr/local/bin/kube-controller-manager \\
+  --address=0.0.0.0 \\
+  --allocate-node-cidrs=true \\
+  --cluster-cidr=$K8S_CIDR_POD \\
+  --cluster-name=$CLUSTERNAME \\
+  --flex-volume-plugin-dir="${K8S_DIR}/kublets-plugins/volume/exec/" \\
+  --cluster-signing-cert-file=${K8S_DIR}/certs/ca.pem \\
+  --cluster-signing-key-file=${K8S_DIR}/certs/ca-key.pem \\
+  --kubeconfig=${K8S_DIR}/conf/kube-controller-manager.kubeconfig \\
+  --leader-elect=true \\
+  --root-ca-file=${K8S_DIR}/certs/ca.pem \\
+  --service-account-private-key-file=${K8S_DIR}/certs/service-account-key.pem \\
+  --service-cluster-ip-range=${K8S_CIDR_SERVICE} \\
+  --use-service-account-credentials=true \\
+  --v=2
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOS
+
+cat > ./conf/k8s/admin/kube-scheduler-${M}.yaml << EOA
+apiVersion: componentconfig/v1alpha1
+kind: KubeSchedulerConfiguration
+clientConnection:
+  kubeconfig: "${K8S_DIR}/conf/kube-scheduler.kubeconfig"
+leaderElection:
+  leaderElect: true
+EOA
+
+cat > ./conf/k8s/admin/kube-scheduler-${M}.service << EOL
+[Unit]
+Description=Kubernetes Scheduler
+Documentation=https://github.com/kubernetes/kubernetes
+
+[Service]
+ExecStart=/usr/local/bin/kube-scheduler \\
+  --config=${K8S_DIR}/conf/kube-scheduler.yaml \\
+  --v=2
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOL
+        echo ""
+        @go.log INFO "Copying Config files"
+        echo ""
+        scp -i ./conf/iuser.key ./conf/k8s/admin/kube-api-${M}.service ./conf/k8s/admin/kube-controller-${M}.service ./conf/k8s/admin/kube-scheduler-${M}.service ./conf/k8s/admin/kube-scheduler-${M}.yaml  ${IUSER}@${EXT_IP}:/opt/k8s/conf/
+        echo ""
+        @go.log INFO "Moving to final locations"
+        echo ""
+        ssh -i ./conf/iuser.key ${IUSER}@${EXT_IP} "mv /opt/k8s/conf/kube-api-${M}.service /opt/k8s/conf/kube-api.service && mv /opt/k8s/conf/kube-controller-${M}.service /opt/k8s/conf/kube-controller.service && mv /opt/k8s/conf/kube-scheduler-${M}.service /opt/k8s/conf/kube-scheduler.service && mv /opt/k8s/conf/kube-scheduler-${M}.yaml /opt/k8s/conf/kube-scheduler.yaml"
+        echo ""
+        @go.log INFO "Copying K8S service files to /etc/systemd/system"
+        echo ""
+        ssh -i $OUT_KEY ${IUSER}@${EXT_IP} "${K8S_CP_CMD}"
+        echo ""
+        @go.log INFO "Starting K8S Services"
+        echo ""
+        ssh -i $OUT_KEY ${IUSER}@${EXT_IP} "${K8S_START_CMD}"
+    done
+
+}
+
+_k8scontrollerinstall "$@"

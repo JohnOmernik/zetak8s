@@ -7,14 +7,21 @@ sourceconf "$PLATFORM_CONF"
 sourceconf "$CA_CONF"
 
 
+UNATTEND="$1"
+
+K8S_VER="v1.12.4"
 
 if [ ! -f "./bin/kubectl" ]; then
-    @go.log WARN "Downloading kubectl"
-    wget https://storage.googleapis.com/kubernetes-release/release/v1.9.0/bin/linux/amd64/kubectl
-    mv kubectl ./bin/
-    chmod +x ./bin/kubectl
+    MYDIR=$(pwd)
+    cd ./bin
+    @go.log WARN "Downloading kubectl version $K8S_VER"
+    wget https://storage.googleapis.com/kubernetes-release/release/${K8S_VER}/bin/linux/amd64/kubectl
+    chmod +x ./kubectl
+    cd $MYDIR
 fi
+
 KUBECTL="./bin/kubectl"
+
 echo ""
 echo "-----------------------------------"
 echo "This process will ask a series of questions in order to create a k8s.conf script for gettings nodes ready for Zeta"
@@ -22,28 +29,34 @@ echo "The configuration will be located: $K8S_CONF"
 echo "-----------------------------------"
 echo ""
 echo ""
-ret_init_inst "SPOT_INSTS"
+ret_init_inst "master" "MASTER_SPOT_INSTS"
+ret_init_inst "worker" "WORKER_SPOT_INSTS"
 
-if [ "$SPOT_INSTS" == "" ]; then
-    @go.log FATAL "No Noes running exiting"
+if [ "$MASTER_SPOT_INSTS" == "" ]; then
+    @go.log FATAL "No Master Nodes running exiting"
+fi
+if [ "$WORKER_SPOT_INSTS" == "" ]; then
+    @go.log FATAL "No Worker Nodes running exiting"
 fi
 
-ret_init_ips "INST_STR" "$SPOT_INSTS" 1
-if [ "$INST_STR" == "" ]; then
-    @go.log FATAL "No output from status: exiting"
+ret_init_ips "MASTER_INST_STR" "$MASTER_SPOT_INSTS" 1
+if [ "$MASTER_INST_STR" == "" ]; then
+    @go.log FATAL "No output from master status: exiting"
 fi
-INST_STR=$(echo "$INST_STR"|tr ";" " ")
+ret_init_ips "WORKER_INST_STR" "$WORKER_SPOT_INSTS" 1
+if [ "$WORKER_INST_STR" == "" ]; then
+    @go.log FATAL "No output from worker status: exiting"
+fi
+MASTER_INST_STR=$(echo "$MASTER_INST_STR"|tr ";" " ")
+WORKER_INST_STR=$(echo "$WORKER_INST_STR"|tr ";" " ")
+
 echo "---------------------------------------------"
 echo ""
-echo "First the admin nodes"
-echo "The admin/master nodes run etcd and the main Kubernetes servers"
-echo "We force you to to use at lease three nodes for HA purposes"
-echo "Here is list of the available nodes:"
 echo ""
-MYCNT=0
 MST=""
 ALL_NODES=""
-for INST in $INST_STR; do
+MASTER_NODES=""
+for INST in $MASTER_INST_STR; do
     INT_IP=$(echo "$INST"|cut -d"," -f3)
     EXT_IP=$(echo "$INST"|cut -d"," -f4)
     HNAME=$(echo "$INST"|cut -d"," -f5)
@@ -51,49 +64,24 @@ for INST in $INST_STR; do
         ALL_NODES="$HNAME"
         ALL_NODES_EXT_IP="$EXT_IP"
         ALL_NODES_INT_IP="$INT_IP"
+        MASTER_NODES="$HNAME"
+        MASTER_NODES_EXT_IP="$EXT_IP"
+        MASTER_NODES_INT_IP="$INT_IP"
     else
         ALL_NODES="${ALL_NODES},$HNAME"
         ALL_NODES_EXT_IP="$ALL_NODES_EXT_IP,$EXT_IP"
         ALL_NODES_INT_IP="$ALL_NODES_INT_IP,$INT_IP"
-    fi
-    MYCNT=$(( $MYCNT + 1 )) 
-    if [ "$MYCNT" -lt 4 ]; then
-        if [ "$MST" == "" ]; then
-            MST="$HNAME"
-        else
-            MST="$MST,$HNAME"
-        fi
+        MASTER_NODES="${MASTER_NODES},$HNAME"
+        MASTER_NODES_EXT_IP="${MASTER_NODES_EXT_IP},$EXT_IP"
+        MASTER_NODES_INT_IP="${MASTER_NODES_INT_IP},$INT_IP"
     fi
     echo "$HNAME   - $INST"
 done
 echo ""
-read -e -p "Please enter 3 or more hostnamess (comma sep) to use as masters: " -i "$MST" MASTER_NODES
-THREE_TEST=$(echo "$MASTER_NODES"|cut -d"," -f3)
-if [ "$THREE_TEST" == "" ]; then
-    @go.log FATAL "You must enter three master nodes!"
-fi
-
-for M in $(echo "$MASTER_NODES"|tr "," " "); do
-    for INST in $INST_STR; do 
-        T=$(echo "$INST"|grep "$M")
-        if [ "$T" != "" ]; then
-            INT_IP=$(echo "$INST"|cut -d"," -f3)
-            EXT_IP=$(echo "$INST"|cut -d"," -f4)
-            if [ "$MASTER_NODES_EXT_IP" == "" ]; then
-                MASTER_NODES_EXT_IP="$EXT_IP"
-                MASTER_NODES_INT_IP="$INT_IP"
-            else
-                MASTER_NODES_EXT_IP="$MASTER_NODES_EXT_IP,$EXT_IP"
-                MASTER_NODES_INT_IP="$MASTER_NODES_INT_IP,$INT_IP"
-            fi
-        fi
-    done
-done
-
 
 
 WORKER_NODES=""
-for INST in $INST_STR; do
+for INST in $WORKER_INST_STR; do
     HNAME=$(echo "$INST"|cut -d"," -f5)
     INT_IP=$(echo "$INST"|cut -d"," -f3)
     EXT_IP=$(echo "$INST"|cut -d"," -f4)
@@ -103,22 +91,33 @@ for INST in $INST_STR; do
             WORKER_NODES="$HNAME"
             WORKER_NODES_EXT_IP="$EXT_IP"
             WORKER_NODES_INT_IP="$INT_IP"
+            ALL_NODES="${ALL_NODES},$HNAME"
+            ALL_NODES_EXT_IP="$ALL_NODES_EXT_IP,$EXT_IP"
+            ALL_NODES_INT_IP="$ALL_NODES_INT_IP,$INT_IP"
         else
             WORKER_NODES="$WORKER_NODES,$HNAME"
             WORKER_NODES_EXT_IP="$WORKER_NODES_EXT_IP,$EXT_IP"
             WORKER_NODES_INT_IP="$WORKER_NODES_INT_IP,$INT_IP"
+            ALL_NODES="${ALL_NODES},$HNAME"
+            ALL_NODES_EXT_IP="$ALL_NODES_EXT_IP,$EXT_IP"
+            ALL_NODES_INT_IP="$ALL_NODES_INT_IP,$INT_IP"
         fi
     fi
 done
 echo ""
-echo "The remaining nodes ($WORKER_NODES) will be used as worker nodes"
-echo ""
-echo ""
-read -e -p "Cluster name: " -i "myk8s" CLUSTERNAME
+if [ "$UNATTEND" == "1" ]; then
+    CLUSTERNAME="myk8s"
+else
+    read -e -p "Cluster name: " -i "myk8s" CLUSTERNAME
+fi
 echo ""
 echo "Please enter a POSIX client base mount point. This will be used, with the clustername as the basis for posix interaction with your shared filesystem"
 echo ""
-read -e -p "Cluster Mount point: " -i "zeta" CLUSTERBASE
+if [ "$UNATTEND" == "1" ]; then
+    CLUSTERBASE="mapr"
+else
+    read -e -p "Cluster Mount point: " -i "mapr" CLUSTERBASE
+fi
 echo ""
 echo "Your cluster base is: $CLUSTERBASE"
 echo "Your cluster name is: $CLUSTERNAME"
@@ -129,9 +128,31 @@ echo ""
 echo "DNS Resolution - Needs to be platform specfic"
 echo "This is needed for external DNS resolution, defaults are examples from an AWS region, please enure the resolve it correct for your installation"
 echo ""
-read -e -p "Space separated list of DNS resolver IPs: " -i "172.31.0.2" DNS_RESOLVERS
+
+CLUSTER_DNS_IP="10.32.0.10"
+if [ "$UNATTEND" == "1" ]; then
+    DNS_UPSTREAM="172.31.0.2"
+else
+    read -e -p "Comma separated list of DNS upstream resolver IPs (We prepend the cluster dns of $CLUSTER_DNS to this): " DNS_UPSTREAM
+fi
+
+if [ "$DNS_UPSTREAM" == "" ]; then
+    DNS_RESOLVERS="$CLUSTER_DNS_IP"
+else
+    DNS_RESOLVERS="${CLUSTER_DNS_IP},${DNS_UPSTREAM}"
+fi
+
+REVERSE_CIDRS="in-addr.arpa ip6.arpa"
+
+
 echo ""
-read -e -p "DNS Search base: " -i "us-west-2.compute.internal" DNS_SEARCH
+CLUSTER_DOMAIN="cluster.local"
+DNS_SEARCH="${CLUSTER_DOMAIN}"
+#if [ "$UNATTEND" == "1" ]; then
+#    DNS_SEARCH="us-west-2.compute.internal"
+#else
+#    read -e -p "DNS Search base: " -i "us-west-2.compute.internal" DNS_SEARCH
+#fi
 echo ""
 
 echo ""
@@ -142,20 +163,122 @@ echo "---------------------------------------"
 echo "If you need to specify a HTTP_PROXY for docker building, please enter it here"
 echo "If this variable is filled, it will add the proxy lines to the docker files for building the images"
 echo ""
-read -p "Enter the proxy information (blank for none): " ZETA_PROXY
+if [ "$UNATTEND" == "1" ]; then
+    ZETA_PROXY=""
+else
+    read -p "Enter the proxy information (blank for none): " ZETA_PROXY
+fi
+
+
+
 
 echo ""
 echo "---------------------------------------"
 echo "If you need to specify a NO_PROXY string it's highly recommended. Use your subnets and internal domain names"
 echo "Example: \"192.168.0.0/16,mycompany.com\""
 echo ""
-read -p "Enter the noproxy information (blank for none): " ZETA_NOPROXY
+if [ "$UNATTEND" == "1" ]; then
+    ZETA_NOPROXY=""
+else
+    read -p "Enter the noproxy information (blank for none): " ZETA_NOPROXY
+fi
 
 echo ""
-read -e -p "Please enter pod network CIDR: " -i "192.168.0.0/16" K8S_CIDR_POD
+echo "The following is the list of CRI (Container Runtime Interface) Providers included: Please select a provider:"
+echo ""
+PROV=$(ls -1 ./scripts/lib|grep "libcri")
+for P in $PROV; do
+    echo "$P"|sed "s/libcri//"
+done
+echo ""
+if [ "$UNATTEND" == "1" ]; then
+    CRI_PROV="docker"
+else
+    read -e -p "Please enter a CRI Provider to use: " -i "containerd" CRI_PROV
+fi
+K8S_CRI_PROV="libcri${CRI_PROV}"
+
+
+echo ""
+echo "The following is the list of CNI (Container Network Interface) Providers included: Please select a provider:"
+echo ""
+PROV=$(ls -1 ./scripts/lib|grep "libcni")
+for P in $PROV; do
+    echo "$P"|sed "s/libcni//"
+done
+echo ""
+if [ "$UNATTEND" == "1" ]; then
+    CNI_PROV="calico"
+else
+    read -e -p "Please enter a CNI Provider to use: " -i "flannel" CNI_PROV
+fi
+K8S_CNI_PROV="libcni${CNI_PROV}"
+
+
+############################################### IP Stuff
+DEF_POD="10.244.0.0/16"
+DEF_SERVICE="10.32.0.0/24"
+DEF_CLUSTER="10.64.0.0/12"
+
+echo ""
+if [ "$UNATTEND" == "1" ]; then
+    K8S_CIDR_POD="${DEF_POD}"
+else
+    read -e -p "Please enter pod network CIDR: " -i "${DEF_POD}" K8S_CIDR_POD
+fi
+echo ""
+
+echo ""
+if [ "$UNATTEND" == "1" ]; then
+    K8S_CIDR_SERVICE="${DEF_SERVICE}"
+else
+    read -e -p "Please enter a service CIDR: " -i "${DEF_SERVICE}" K8S_CIDR_SERVICE
+fi
+echo ""
+
+echo ""
+if [ "$UNATTEND" == "1" ]; then
+    K8S_CIDR_CLUSTER="${DEF_CLUSTER}"
+else
+    read -e -p "Please enter a cluster CIDR (Use x to be incremented variables): " -i "${DEF_CLUSTER}" K8S_CIDR_CLUSTER
+fi
+echo ""
+
+###############################################
+
+
+echo ""
+if [ "$UNATTEND" == "1" ]; then
+    K8S_PORT_START_SERVICE="30000"
+else
+    read -e -p "Please enter a service Port Start: " -i "30000" K8S_PORT_START_SERVICE
+fi
+echo ""
+
+echo ""
+if [ "$UNATTEND" == "1" ]; then
+    K8S_PORT_END_SERVICE="32767"
+else
+    read -e -p "Please enter a service Port End: " -i "32767" K8S_PORT_END_SERVICE
+fi
 echo ""
 
 
+ETCD_VER="v3.3.6"
+ETCD_BASE="https://github.com/coreos/etcd/releases/download/${ETCD_VER}"
+ETCD_FILE="etcd-${ETCD_VER}-linux-amd64.tar.gz"
+ETCD_URL="${ETCD_BASE}/${ETCD_FILE}"
+ETCD_DIR="etcd-${ETCD_VER}-linux-amd64"
+ETCD_STATUS_CMD="sudo ETCDCTL_API=3 etcdctl member list --endpoints=https://127.0.0.1:2379 --cacert=/opt/k8s/certs/ca.pem --cert=/opt/k8s/certs/kubernetes.pem --key=/opt/k8s/certs/kubernetes-key.pem"
+
+
+K8S_BASE="https://storage.googleapis.com/kubernetes-release/release/${K8S_VER}/bin/linux/amd64"
+K8S_DIR="/opt/k8s"
+K8S_BIN_DIR="${K8S_DIR}/bin/$K8S_VER"
+
+
+CNI_CONF_DIR="/opt/k8s/cni/net.d"
+CNI_BIN_DIR="/opt/k8s/cni/bin"
 
 cat > $K8S_CONF << EOP
 #!/bin/bash
@@ -173,19 +296,50 @@ ALL_NODES="$ALL_NODES"
 ALL_NODES_EXT_IP="$ALL_NODES_EXT_IP"
 ALL_NODES_INT_IP="$ALL_NODES_INT_IP"
 
+#EtcD Information
+ETCD_VER="${ETCD_VER}"
+ETCD_BASE="${ETCD_BASE}"
+ETCD_FILE="${ETCD_FILE}"
+ETCD_URL="${ETCD_URL}"
+ETCD_DIR="${ETCD_DIR}"
+ETCD_STATUS_CMD="${ETCD_STATUS_CMD}"
 
 KUBECTL="$KUBECTL"
-#POD Network
+
 K8S_CIDR_POD="$K8S_CIDR_POD"
+K8S_CIDR_SERVICE="$K8S_CIDR_SERVICE"
+K8S_CIDR_CLUSTER="$K8S_CIDR_CLUSTER"
+K8S_PORT_START_SERVICE="$K8S_PORT_START_SERVICE"
+K8S_PORT_END_SERVICE="$K8S_PORT_END_SERVICE"
+
+K8S_VER="${K8S_VER}"
+K8S_BASE="${K8S_BASE}"
+K8S_DIR="${K8S_DIR}"
+K8S_BIN_DIR="${K8S_BIN_DIR}"
 
 #Proxy info
 ZETA_PROXY="$ZETA_PROXY"
 ZETA_NOPROXY="$ZETA_NOPROXY"
 
+DNS_UPSTREAM="$DNS_UPSTREAM"
+DNS_RESOLVERS="$DNS_RESOLVERS"
+DNS_SEARCH="$DNS_SEARCH"
+CLUSTER_DNS_IP="${CLUSTER_DNS_IP}"
+CLUSTER_DOMAIN="${CLUSTER_DOMAIN}"
+REVERSE_CIDRS="${REVERSE_CIDRS}"
 #Cluster Mount Points
 CLUSTERBASE="$CLUSTERBASE"
 CLUSTERNAME="$CLUSTERNAME"
 CLUSTERMOUNT="$CLUSTERMOUNT"
+
+CNI_CONF_DIR="$CNI_CONF_DIR"
+CNI_BIN_DIR="$CNI_BIN_DIR"
+
+K8S_CNI_PROV="$K8S_CNI_PROV"
+K8S_CRI_PROV="$K8S_CRI_PROV"
+. "\$_GO_USE_MODULES" \$K8S_CNI_PROV
+. "\$_GO_USE_MODULES" \$K8S_CRI_PROV
+
 
 K8S_LOCKED="1"
 

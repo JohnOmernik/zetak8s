@@ -1,0 +1,238 @@
+#!/bin/bash
+
+#
+# Create all the certificates for the bootstrapped K8s Cluster
+#
+
+sourceconf "$PLATFORM_CONF"
+sourceconf "$CA_CONF"
+sourceconf "$K8S_CONF"
+sourceconf "$PREP_CONF"
+function _initk8sconf(){
+
+    if [ -d "./conf/k8s" ]; then
+        @go.log WARN "Skipper"
+#        @go.log FATAL "./conf/k8s already exists exiting"
+    else
+        mkdir -p ./conf/k8s
+        mkdir -p ./conf/k8s/workers
+        mkdir -p ./conf/k8s/admin
+    fi
+
+    ret_init_inst "master" "MASTER_SPOT_INSTS"
+    ret_init_inst "worker" "WORKER_SPOT_INSTS"
+
+    if [ "$MASTER_SPOT_INSTS" == "" ]; then
+        @go.log FATAL "No Master Nodes running exiting"
+    fi
+    if [ "$WORKER_SPOT_INSTS" == "" ]; then
+        @go.log FATAL "No Worker Nodes running exiting"
+    fi
+    ret_init_ips "MASTER_INST_STR" "$MASTER_SPOT_INSTS" 1
+    if [ "$MASTER_INST_STR" == "" ]; then
+        @go.log FATAL "No output from master status: exiting"
+    fi
+    ret_init_ips "WORKER_INST_STR" "$WORKER_SPOT_INSTS" 1
+    if [ "$WORKER_INST_STR" == "" ]; then
+        @go.log FATAL "No output from worker status: exiting"
+    fi
+
+    MASTER_INST_STR=$(echo "$MASTER_INST_STR"|tr ";" " ")
+    WORKER_INST_STR=$(echo "$WORKER_INST_STR"|tr ";" " ")
+
+
+    MYDIR=$(pwd)
+    echo ""
+    echo "------------------"
+    echo "Generating kube-proxy Config"
+    echo "------------------"
+    echo ""
+    ./bin/kubectl config set-cluster $CLUSTERNAME \
+    --certificate-authority=./conf/ca/ca.pem \
+    --embed-certs=true \
+    --server=https://${LBDNS}:6443 \
+    --kubeconfig=./conf/k8s/admin/kube-proxy.kubeconfig
+
+     ./bin/kubectl config set-credentials system:kube-proxy \
+    --client-certificate=./conf/ca/certs/kube-proxy.pem \
+    --client-key=./conf/ca/keys/kube-proxy-key.pem \
+    --embed-certs=true \
+    --kubeconfig=./conf/k8s/admin/kube-proxy.kubeconfig
+
+    ./bin/kubectl config set-context default \
+    --cluster=$CLUSTERNAME \
+    --user=system:kube-proxy \
+    --kubeconfig=./conf/k8s/admin/kube-proxy.kubeconfig
+
+    ./bin/kubectl config use-context default --kubeconfig=./conf/k8s/admin/kube-proxy.kubeconfig
+
+
+
+    echo ""
+    echo "------------------"
+    echo "Generating Worker Node Configs"
+    echo "------------------"
+    echo ""
+    for WN in $(echo "$WORKER_NODES"|tr "," " "); do
+
+        WN_INST=""
+        for INST in $WORKER_INST_STR; do
+        T=$(echo "$INST"|grep "$WN")
+            if [ "$T" != "" ]; then
+                WN_INST="$INST"
+            fi
+        done
+        INT_IP=$(echo "$WN_INST"|cut -d"," -f3)
+        EXT_IP=$(echo "$WN_INST"|cut -d"," -f4)
+
+
+
+    ./bin/kubectl config set-cluster $CLUSTERNAME \
+    --certificate-authority=./conf/ca/ca.pem \
+    --embed-certs=true \
+    --server=https://${LBDNS}:6443 \
+    --kubeconfig=./conf/k8s/workers/${WN}.kubeconfig
+
+    ./bin/kubectl config set-credentials system:node:${WN} \
+    --client-certificate=./conf/ca/certs/${WN}.pem \
+    --client-key=./conf/ca/keys/${WN}-key.pem \
+    --embed-certs=true \
+    --kubeconfig=./conf/k8s/workers/${WN}.kubeconfig
+
+    ./bin/kubectl config set-context default \
+    --cluster=${CLUSTERNAME} \
+    --user=system:node:${WN} \
+    --kubeconfig=./conf/k8s/workers/${WN}.kubeconfig
+
+    ./bin/kubectl config use-context default --kubeconfig=./conf/k8s/workers/${WN}.kubeconfig
+
+    scp -i ./conf/iuser.key ./conf/k8s/admin/kube-proxy.kubeconfig ./conf/k8s/workers/${WN}.kubeconfig ${IUSER}@${EXT_IP}:/opt/k8s/conf/
+
+    done
+
+    echo ""
+    echo "------------------"
+    echo "Generating kube-controller-manager Config"
+    echo "------------------"
+    echo ""
+    ./bin/kubectl config set-cluster $CLUSTERNAME \
+    --certificate-authority=./conf/ca/ca.pem \
+    --embed-certs=true \
+    --server=https://127.0.0.1:6443 \
+    --kubeconfig=./conf/k8s/admin/kube-controller-manager.kubeconfig
+
+    ./bin/kubectl config set-credentials system:kube-controller-manager \
+    --client-certificate=./conf/ca/certs/kube-controller-manager.pem \
+    --client-key=./conf/ca/keys/kube-controller-manager-key.pem \
+    --embed-certs=true \
+    --kubeconfig=./conf/k8s/admin/kube-controller-manager.kubeconfig
+
+    ./bin/kubectl config set-context default \
+    --cluster=$CLUSTERNAME \
+    --user=system:kube-controller-manager \
+    --kubeconfig=./conf/k8s/admin/kube-controller-manager.kubeconfig
+
+    ./bin/kubectl config use-context default --kubeconfig=./conf/k8s/admin/kube-controller-manager.kubeconfig
+
+    echo ""
+    echo "------------------"
+    echo "Generating kube-scheduler Config"
+    echo "------------------"
+    echo ""
+
+   ./bin/kubectl config set-cluster $CLUSTERNAME \
+    --certificate-authority=./conf/ca/ca.pem \
+    --embed-certs=true \
+    --server=https://127.0.0.1:6443 \
+    --kubeconfig=./conf/k8s/admin/kube-scheduler.kubeconfig
+
+    ./bin/kubectl config set-credentials system:kube-scheduler \
+    --client-certificate=./conf/ca/certs/kube-scheduler.pem \
+    --client-key=./conf/ca/keys/kube-scheduler-key.pem \
+    --embed-certs=true \
+    --kubeconfig=./conf/k8s/admin/kube-scheduler.kubeconfig
+
+    ./bin/kubectl config set-context default \
+    --cluster=$CLUSTERNAME \
+    --user=system:kube-scheduler \
+    --kubeconfig=./conf/k8s/admin/kube-scheduler.kubeconfig
+
+    ./bin/kubectl config use-context default --kubeconfig=./conf/k8s/admin/kube-scheduler.kubeconfig
+
+
+    echo ""
+    echo "------------------"
+    echo "Generating admin Config"
+    echo "------------------"
+    echo ""
+
+
+
+    ./bin/kubectl config set-cluster $CLUSTERNAME \
+    --certificate-authority=./conf/ca/ca.pem \
+    --embed-certs=true \
+    --server=https://127.0.0.1:6443 \
+    --kubeconfig=./conf/k8s/admin/admin.kubeconfig
+
+    ./bin/kubectl config set-credentials admin \
+    --client-certificate=./conf/ca/certs/admin.pem \
+    --client-key=./conf/ca/keys/admin-key.pem \
+    --embed-certs=true \
+    --kubeconfig=./conf/k8s/admin/admin.kubeconfig
+
+    ./bin/kubectl config set-context default \
+    --cluster=$CLUSTERNAME \
+    --user=admin \
+    --kubeconfig=./conf/k8s/admin/admin.kubeconfig
+
+    ./bin/kubectl config use-context default --kubeconfig=./conf/k8s/admin/admin.kubeconfig
+
+
+    echo ""
+    echo "------------------"
+    echo "Generating external admin Config"
+    echo "------------------"
+    echo ""
+
+
+
+    ./bin/kubectl config set-cluster $CLUSTERNAME \
+    --certificate-authority=./conf/ca/ca.pem \
+    --embed-certs=true \
+    --server=https://${LBDNS}:6443 \
+    --kubeconfig=./conf/k8s/admin/admin_ext.kubeconfig
+
+    ./bin/kubectl config set-credentials admin \
+    --client-certificate=./conf/ca/certs/admin.pem \
+    --client-key=./conf/ca/keys/admin-key.pem \
+    --embed-certs=true \
+    --kubeconfig=./conf/k8s/admin/admin_ext.kubeconfig
+
+    ./bin/kubectl config set-context default \
+    --cluster=$CLUSTERNAME \
+    --user=admin \
+    --kubeconfig=./conf/k8s/admin/admin_ext.kubeconfig
+
+    ./bin/kubectl config use-context default --kubeconfig=./conf/k8s/admin/admin_ext.kubeconfig
+
+
+
+
+
+
+
+    echo ""
+    echo "Copying Admin configs to Admin nodes"
+    echo ""
+    for I in $(echo -n "$MASTER_NODES_EXT_IP"|tr "," " "); do
+        scp -i ./conf/iuser.key ./conf/k8s/admin/admin.kubeconfig ./conf/k8s/admin/kube-controller-manager.kubeconfig ./conf/k8s/admin/kube-scheduler.kubeconfig zetaadm@${I}:/opt/k8s/conf/
+    done
+
+
+}
+
+
+
+
+_initk8sconf "$@"
+

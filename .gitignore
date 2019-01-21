@@ -16,10 +16,40 @@ conf/
 conf/*
 conf/**
 
+# No Archive data
+archive/
+archive/*
+archive/**
+
 # No Temp data
 tmp/*.tmp
 
+tmp/
+tmp/**
+tmp/*
 clearcluster.sh
+build-mapr.sh
+
+
+
+private-kubernetes/
+private-kubernetes/*
+private-kubernetes/**
+
+private-kubernetes-jo/
+private-kubernetes-jo/*
+private-kubernetes-jo/**
+
+mapr-picasso/
+mapr-picasso/*
+mapr-picasso/**
+
+picasso_notes.txt
+
+
+# Files that created on install
+kubectl
+helm
 
 
 # Any Key files should be ignored

@@ -4,6 +4,8 @@
 #
 # No arguments are called here
 
+
+UNATTEND="$1"
 sourceconf "$PLATFORM_CONF"
 . "$_GO_USE_MODULES" $PLATFORM
 echo ""
@@ -21,20 +23,28 @@ echo "It will be stored at $OUT_KEY and its public key will be stored at $OUT_KE
 echo "These values will be saved in the conf for use as well"
 echo ""
 IUSER_UID="2500"
-FSUSER_UID="2000"
+#FSUSER_UID="2000"
 IUSER="zetaadm" # The Main User for Zeta
-FSUSER="mapr"   # The filesystem user for Zeta
+#FSUSER="mapr"   # The filesystem user for Zeta
 echo "We will create two users, one fore node to node setup, another for the filesystem"
-echo "By default these users are:
+echo "By default these users are:"
 echo "Initial User (IUSER): $IUSER - UID: $IUSER_UID"
-echo "FS User (FSUSER): $FSUSER - UID: $FSUSER_UID"
+#echo "FS User (FSUSER): $FSUSER - UID: $FSUSER_UID"
 echo ""
 echo "-----------------------------------"
 echo "We will not get passwords for the users"
 echo ""
-getpass "$IUSER" IUSER_PASS
+if [ "$UNATTEND" == "1" ]; then
+    IUSER_PASS="mypass"
+else
+    getpass "$IUSER" IUSER_PASS
+fi
 echo ""
-getpass "$FSUSER" FSUSER_PASS
+#if [ "$UNATTEND" == "1" ]; then
+#    FSUSER_PASS="mypass"
+#else
+#    getpass "$FSUSER" FSUSER_PASS
+#fi
 echo ""
 #echo "-----------------------------------"
 #echo "Please enter the list of nodes we will be preparing for Zeta, the nodes should be space separated"
@@ -53,8 +63,11 @@ echo "This is not always possible in various environments, so we provide an opti
 echo "This maybe something like pbrun, instead of running sudo %cmd it would run pbrun %cmd"
 echo "This is where you can choose the privilege escalation method"
 echo ""
-read -e -p "Privilege Escalation command: " -i "sudo" PRIV_CMD
-
+if [ "$UNATTEND" == "1" ]; then
+    PRIV_CMD="sudo"
+else
+    read -e -p "Privilege Escalation command: " -i "sudo" PRIV_CMD
+fi
 
 touch $PREP_CONF
 chmod 640 $PREP_CONF
@@ -66,7 +79,7 @@ cat > $PREP_CONF << EOF
 
 # The Main user for Zeta  (zetaadm by default)
 IUSER="$IUSER"
-FSUSER="$FSUSER"
+#FSUSER="$FSUSER"
 # The Privilege Escalation command
 PRIV_CMD="$PRIV_CMD"
 # The following Variables determine whether to generate a key for IUSER, what that key will be called, and what the public key will be called
@@ -76,17 +89,14 @@ OUT_KEY_PUB="$OUT_KEY_PUB"
 
 # The UIDs for IUSER and FSUSER
 IUSER_UID="$IUSER_UID"
-FSUSER_UID="$FSUSER_UID"
+#FSUSER_UID="$FSUSER_UID"
 
 # Passwords for FSUSER and IUSER
-FSUSER_PASS="$FSUSER_PASS"
+#FSUSER_PASS="$FSUSER_PASS"
 IUSER_PASS="$IUSER_PASS"
 
 # Node list to prep
 NODES="$NODES"
-
-# Initial Node to use for staging
-INIT_NODE="$INIT_NODE"
 
 # Interfaces to check for internal IPs (in order)
 INTERFACE_LIST="$INTERFACE_LIST"

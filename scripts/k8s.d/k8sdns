@@ -1,0 +1,25 @@
+#!/bin/bash
+
+#
+# Sets up Kube-DNS  for K8s cluster at 10.32.0.10
+#
+sourceconf "$PLATFORM_CONF"
+sourceconf "$CA_CONF"
+sourceconf "$K8S_CONF"
+sourceconf "$PREP_CONF"
+
+function _k8sdns(){
+    KUBEDNS="https://storage.googleapis.com/kubernetes-the-hard-way/kube-dns.yaml"
+    @go.log INFO "Installing kube-dns from $KUBEDNS"
+    ./bin/kubectl --kubeconfig ./conf/k8s/admin/admin_ext.kubeconfig apply -f $KUBEDNS
+    sleep 5
+
+    @go.log INFO "Check for running pods with:"
+    echo ""
+    echo "./bin/kubectl --kubeconfig ./conf/k8s/admin/admin_ext.kubeconfig get pods -n kube-system"
+
+}
+_k8sdns "$@"
+
+
+

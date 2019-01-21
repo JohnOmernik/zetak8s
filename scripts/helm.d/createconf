@@ -1,0 +1,43 @@
+#!/bin/bash
+#
+# This script walks the user through a series of questions in order to create a prep_conf.conf
+#
+# No arguments are called here
+
+
+UNATTEND="$1"
+sourceconf "$PLATFORM_CONF"
+sourceconf "$PREP_CONF"
+sourceconf "$K8S_CONF"
+. "$_GO_USE_MODULES" $PLATFORM
+
+if [ "$UNATTEND" == "1" ]; then
+    HELM_VERS="2.12.1"
+else
+    read -e -p "What version of Helm should we install:  " -i "2.12.1" HELM_VERS
+fi
+
+HELM_FILE="helm-v\${HELM_VERS}-linux-amd64.tar.gz"
+HELM_URL="https://storage.googleapis.com/kubernetes-helm/\${HELM_FILE}"
+
+touch $HELM_CONF
+chmod 640 $HELM_CONF
+
+
+cat > $HELM_CONF << EOF
+#
+# Configuration script for prepping nodes for Zeta Architecture
+
+# If this is set to 1, scripts will assume "Use" when the conf exists.
+HELM_VERS="$HELM_VERS"
+HELM_FILE="$HELM_FILE"
+HELM_URL="$HELM_URL"
+
+
+
+HELM_LOCKED="1"
+
+EOF
+
+@go.log INFO "Helm Conf file written to $HELM_CONF"
+

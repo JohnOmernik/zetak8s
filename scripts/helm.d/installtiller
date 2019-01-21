@@ -1,0 +1,73 @@
+#!/bin/bash
+
+#
+# Sets up Tiller for K8s cluster
+#
+sourceconf "$PLATFORM_CONF"
+sourceconf "$CA_CONF"
+sourceconf "$K8S_CONF"
+sourceconf "$PREP_CONF"
+sourceconf "$HELM_CONF"
+
+function _installtiller(){
+    if [ ! -f "./bin/helm" ]; then
+        @go.log WARN "No helm detected at ./bin/helm exiting - Perhaps run ./zeta helm installhelm first?"
+        exit 1
+    fi
+
+    @go.log INFO "Creating tiller service account and setting rbac in the kube-system namespace"
+
+cat > ./conf/k8s/helm-rbac-config.yaml << EOY
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tiller
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: tiller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+  - kind: ServiceAccount
+    name: tiller
+    namespace: kube-system
+EOY
+    ./kubectl create -f ./conf/k8s/helm-rbac-config.yaml
+    echo ""
+
+    @go.log INFO "Creating Certificate for Tiller Host"
+    ./zeta ca createcert -u -cn="tiller" -cncert="tiller-server" -o="system:tiller-server"
+
+    @go.log INFO "Creating Certificate for Helm Client"
+    ./zeta ca createcert -u -cn="helm" -cncert="helm-client" -o="system:helm-client"
+
+    echo "./helm init --service-account tiller --override 'spec.template.spec.containers[0].command'='{/tiller,--storage=secret}' "
+    echo "--tiller-tls --tiller-tls-cert ./conf/ca/certs/tiller.pem --tiller-tls-key ./conf/ca/keys/tiller-key.pem --tiller-tls-verify --tls-ca-cert ./conf/ca/ca.pem"
+    ./helm init --service-account tiller --override 'spec.template.spec.containers[0].command'='{/tiller,--storage=secret}' \
+    --tiller-tls --tiller-tls-cert ./conf/ca/certs/tiller.pem --tiller-tls-key ./conf/ca/keys/tiller-key.pem --tiller-tls-verify --tls-ca-cert ./conf/ca/ca.pem
+
+    @go.log INFO "Rewriting ./helm to use tls information from now on"
+
+    rm ./helm
+cat > ./helm << EOF
+#!/bin/bash
+cp ./conf/k8s/admin/admin_ext.kubeconfig ~/.kube/config
+TLS_INFO="--tls --tls-ca-cert ./conf/ca/ca.pem --tls-cert ./conf/ca/certs/helm.pem --tls-key ./conf/ca/keys/helm-key.pem"
+./bin/helm --home ./conf/helm \$@ \${TLS_INFO}
+if [ "\$?" != "0" ]; then
+    ./bin/helm --home ./conf/helm \$@
+fi
+rm ~/.kube/config
+EOF
+    chmod +x ./helm
+
+}
+_installtiller "$@"
+
+
+

@@ -10,12 +10,15 @@ sourceconf "$PLATFORM_CONF"
 function _k8s() {
 
     LOCK="0"
-
+    UNATTEND="0"
     for i in "$@"
     do
     case $i in
         -l)
         LOCK="1"
+        ;;
+        -u)
+        UNATTEND="1"
         ;;
         *)
             # unknown option
@@ -23,7 +26,7 @@ function _k8s() {
     esac
     done
 
-    initconf "$K8S_CONF"
+    initconf "$K8S_CONF" "$UNATTEND"
 
     echo ""
     echo "********************************"
@@ -33,7 +36,7 @@ function _k8s() {
     echo ""
     echo "Commands to use with k8s:"
     echo ""
-    echo "./zeta k8s bootstrap         # Create k8s config and bootstrap on bootstrap node"
+    echo "./zeta k8s createlb          # Create a LB for the K8s cluster"
     echo "./zeta k8s install -n=NODE1  # Install k8s on NODE1 given k8s.conf"
     echo "./zeta k8s install -a        # Install k8s on all nodes listed in k8s.conf"
     echo ""

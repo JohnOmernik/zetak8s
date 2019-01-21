@@ -1,0 +1,264 @@
+#!/bin/bash
+
+#
+# Create a k8s controller installation
+#
+#
+sourceconf "$PLATFORM_CONF"
+sourceconf "$CA_CONF"
+sourceconf "$K8S_CONF"
+sourceconf "$PREP_CONF"
+
+function _k8sworkerinstall(){
+    ret_init_inst "master" "MASTER_SPOT_INSTS"
+    ret_init_inst "worker" "WORKER_SPOT_INSTS"
+
+    if [ "$MASTER_SPOT_INSTS" == "" ]; then
+        @go.log FATAL "No Master Nodes running exiting"
+    fi
+    if [ "$WORKER_SPOT_INSTS" == "" ]; then
+        @go.log FATAL "No Worker Nodes running exiting"
+    fi
+    ret_init_ips "MASTER_INST_STR" "$MASTER_SPOT_INSTS" 1
+    if [ "$MASTER_INST_STR" == "" ]; then
+        @go.log FATAL "No output from master status: exiting"
+    fi
+    ret_init_ips "WORKER_INST_STR" "$WORKER_SPOT_INSTS" 1
+    if [ "$WORKER_INST_STR" == "" ]; then
+        @go.log FATAL "No output from worker status: exiting"
+    fi
+
+    MASTER_INST_STR=$(echo "$MASTER_INST_STR"|tr ";" " ")
+    WORKER_INST_STR=$(echo "$WORKER_INST_STR"|tr ";" " ")
+
+
+    K8S_MK_DIR_CMD="sudo mkdir -p ${K8S_BIN_DIR} && sudo mkdir -p ${K8S_DIR}/log && sudo mkdir -p ${K8S_DIR}/cni/net.d && sudo mkdir -p ${K8S_DIR}/cni/bin && sudo mkdir -p ${K8S_DIR}/lib/kubelet && sudo mkdir -p ${K8S_DIR}/lib/kubernetes && sudo mkdir -p ${K8S_DIR}/lib/kube-proxy && sudo mkdir -p ${K8S_DIR}/run && sudo chown -R ${IUSER}:root ${K8S_DIR} && sudo chmod -R 770 ${K8S_DIR} && sudo chmod 775 ${K8S_DIR} && sudo chmod -R 775 ${K8S_BIN_DIR}"
+    K8S_DL_CMD="wget  --no-verbose --https-only --timestamping ${CNI_BASE}/${CNI_FILE} ${K8S_BASE}/kubectl ${K8S_BASE}/kube-proxy ${K8S_BASE}/kubelet"
+    K8S_MV_CMD="mv kubelet ${K8S_BIN_DIR}/ && mv kube-proxy ${K8S_BIN_DIR}/ && mv kubectl ${K8S_BIN_DIR}/ && tar -xvf ${CNI_FILE} -C ${K8S_DIR}/cni/bin/ && rm ${CNI_FILE} && sudo chmod +x ${K8S_BIN_DIR}/*"
+    K8S_LN_CMD="sudo ln -s ${K8S_DIR}/cni /etc/cni && sudo ln -s ${K8S_BIN_DIR}/kubelet /usr/local/bin/kubelet && sudo ln -s ${K8S_BIN_DIR}/kube-proxy /usr/local/bin/kube-proxy && sudo ln -s ${K8S_BIN_DIR}/kubectl /usr/local/bin/kubectl"
+    K8S_START_CMD="sudo systemctl daemon-reload && sudo systemctl enable kubelet kube-proxy && sudo systemctl start kubelet kube-proxy"
+
+
+
+    echo ""
+    @go.log INFO "Creating Common Conf files for K8S workers"
+
+cat > ./conf/k8s/workers/99-cni-loopback.conf << EOL
+{
+    "cniVersion": "0.3.1",
+    "type": "loopback"
+}
+EOL
+
+cat > ./conf/k8s/workers/config.toml << EOD
+[plugins]
+$CRI_TOML
+  [plugins.cri.cni]
+    bin_dir = "/opt/k8s/cni/bin"
+    conf_dir = "/opt/k8s/cni/net.d"
+EOD
+
+if [ "$K8S_CRI_PROV" == "libcricontainerd" ]; then
+cat > ./conf/k8s/workers/containerd.service << EOC
+${CRI_SVC}
+EOC
+fi
+
+# Removed to test weave
+#clusterCIDR: "${K8S_CIDR_CLUSTER}"
+
+cat > ./conf/k8s/workers/kube-proxy-config.yaml << EOP
+kind: KubeProxyConfiguration
+apiVersion: kubeproxy.config.k8s.io/v1alpha1
+clientConnection:
+  kubeconfig: "${K8S_DIR}/conf/kube-proxy.kubeconfig"
+mode: "iptables"
+EOP
+
+if [ "$K8S_CRI_PROV" == "libcridocker" ]; then
+cat > ./conf/k8s/workers/kubelet.service << EOU
+[Unit]
+Description=Kubernetes Kubelet
+Documentation=https://github.com/kubernetes/kubernetes
+
+[Service]
+ExecStart=/usr/local/bin/kubelet \\
+  --config=${K8S_DIR}/conf/kubelet-config.yaml \\
+  --allow_privileged=true \\
+  --image-pull-progress-deadline=2m \\
+  --kubeconfig=${K8S_DIR}/conf/kubelet.kubeconfig \\
+  --network-plugin=cni \\
+  --cni-conf-dir=${CNI_CONF_DIR} \\
+  --cni-bin-dir=${CNI_BIN_DIR} \\
+  --register-node=true \\
+  --v=2
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOU
+else
+cat > ./conf/k8s/workers/kubelet.service << EOI
+[Unit]
+Description=Kubernetes Kubelet
+Documentation=https://github.com/kubernetes/kubernetes
+
+$K8S_SVC_AFTER
+$K8S_SVC_REQUIRES
+
+[Service]
+ExecStart=/usr/local/bin/kubelet \\
+  --config=${K8S_DIR}/conf/kubelet-config.yaml \\
+  --allow_privileged=true \\
+  ${CRI_RUNTIME} \\
+  ${CRI_RUNTIME_ENDPOINT} \\
+  --image-pull-progress-deadline=2m \\
+  --kubeconfig=${K8S_DIR}/conf/kubelet.kubeconfig \\
+  --network-plugin=cni \\
+  --cni-conf-dir=${CNI_CONF_DIR} \\
+  --cni-bin-dir=${CNI_BIN_DIR} \\
+  --register-node=true \\
+  --v=2
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOI
+fi
+
+cat > ./conf/k8s/workers/kube-proxy.service << EOQ
+[Unit]
+Description=Kubernetes Kube Proxy
+Documentation=https://github.com/kubernetes/kubernetes
+
+[Service]
+ExecStart=/usr/local/bin/kube-proxy \\
+  --config=${K8S_DIR}/conf/kube-proxy-config.yaml
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOQ
+
+
+
+DNS_LIST=""
+for X in $(echo -n "$DNS_RESOLVERS"|tr "," " "); do
+    if [ "$DNS_LIST" == "" ]; then
+        DNS_LIST="  - \"$X\""
+    else
+        DNS_LIST="$DNS_LIST"$'\n'"  - \"$X\""
+    fi
+done
+    TCNT=0
+    TFIN=-1000
+
+    for M in $(echo "$WORKER_NODES"|tr "," " "); do
+        if [ "$TCNT" == "$TFIN" ]; then
+            echo "Max Reached - Exiting"
+            exit 0
+        fi
+        echo "--------------------------------------------"
+        for INST in $WORKER_INST_STR; do
+            T=$(echo "$INST"|grep "$M")
+            if [ "$T" != "" ]; then
+                INT_IP=$(echo "$INST"|cut -d"," -f3)
+                EXT_IP=$(echo "$INST"|cut -d"," -f4)
+            fi
+        done
+        echo ""
+        @go.log INFO "Installing K8S Worker bins on $M - $EXT_IP"
+        echo ""
+
+        echo ""
+        @go.log INFO "Creating K8S bin Dir and setting permissions"
+        echo ""
+        ssh -i $OUT_KEY ${IUSER}@${EXT_IP} "$K8S_MK_DIR_CMD"
+        echo ""
+
+        @go.log INFO "Downloading K8S Version: $K8S_VER"
+        echo ""
+        ssh -i $OUT_KEY ${IUSER}@${EXT_IP} "$K8S_DL_CMD"
+        echo ""
+        if [ "$K8S_DL_CRI_CMD" != "" ]; then
+            ssh -i $OUT_KEY ${IUSER}@${EXT_IP} "$K8S_DL_CRI_CMD"
+        fi
+        echo ""
+
+        @go.log INFO "Moving Binaries"
+        echo ""
+        ssh -i $OUT_KEY ${IUSER}@${EXT_IP} "$K8S_MV_CMD"
+        echo ""
+        if [ "$K8S_MV_CRI_CMD" != "" ]; then
+            ssh -i $OUT_KEY ${IUSER}@${EXT_IP} "$K8S_MV_CRI_CMD"
+        fi
+        echo ""
+
+        @go.log INFO "Linking K8S binaries to /usr/local/bin"
+        echo ""
+        ssh -i $OUT_KEY ${IUSER}@${EXT_IP} "${K8S_LN_CMD}"
+        echo ""
+        if [ "$K8S_LN_CRI_CMD" != "" ]; then
+            ssh -i $OUT_KEY ${IUSER}@${EXT_IP} "$K8S_LN_CRI_CMD"
+        fi
+        echo ""
+
+        @go.log INFO "Copying Loopback CNI conf files"
+        echo ""
+        scp -i ./conf/iuser.key ./conf/k8s/workers/99-cni-loopback.conf  ${IUSER}@${EXT_IP}:${K8S_DIR}/cni/net.d/
+        echo ""
+        scp -i ./conf/iuser.key ./conf/k8s/admin/kube-proxy.kubeconfig ./conf/k8s/workers/${M}.kubeconfig ${IUSER}@${EXT_IP}:${K8S_DIR}/conf/
+        if [ "$K8S_CRI_PROV" == "libcricontainerd" ]; then
+            @go.log INFO "Copying config.toml for containerd and linking to /etc/containerd/config.toml and setting up containerd.service"
+            scp -i ./conf/iuser.key ./conf/k8s/workers/containerd.service ./conf/k8s/workers/config.toml ${IUSER}@${EXT_IP}:${K8S_DIR}/conf/
+            ssh -i ./conf/iuser.key ${IUSER}@${EXT_IP} "sudo mkdir -p /etc/containerd && sudo ln -s ${K8S_DIR}/conf/config.toml /etc/containerd/config.toml && sudo cp ${K8S_DIR}/conf/containerd.service /etc/systemd/system/"
+        fi
+        echo ""
+        @go.log INFO "Creating and copying kubelet and kube-proxy config files and service files"
+        echo ""
+
+
+cat > ./conf/k8s/workers/kubelet-config-${M}.yaml << EOK
+kind: KubeletConfiguration
+apiVersion: kubelet.config.k8s.io/v1beta1
+authentication:
+  anonymous:
+    enabled: false
+  webhook:
+    enabled: true
+  x509:
+    clientCAFile: "${K8S_DIR}/certs/ca.pem"
+authorization:
+  mode: Webhook
+clusterDomain: "$DNS_SEARCH"
+podCIDR: "${K8S_CIDR_POD}"
+clusterDNS:
+$DNS_LIST
+runtimeRequestTimeout: "15m"
+tlsCertFile: "${K8S_DIR}/certs/${M}.pem"
+tlsPrivateKeyFile: "${K8S_DIR}/certs/${M}-key.pem"
+EOK
+        scp -i ./conf/iuser.key ./conf/k8s/workers/kube-proxy.service ./conf/k8s/workers/kube-proxy-config.yaml ./conf/k8s/workers/kubelet.service ./conf/k8s/workers/kubelet-config-${M}.yaml ${IUSER}@${EXT_IP}:${K8S_DIR}/conf/
+        ssh -i ./conf/iuser.key ${IUSER}@${EXT_IP} "mv ${K8S_DIR}/conf/kubelet-config-${M}.yaml ${K8S_DIR}/conf/kubelet-config.yaml && mv ${K8S_DIR}/conf/${M}.kubeconfig ${K8S_DIR}/conf/kubelet.kubeconfig"
+        ssh -i ./conf/iuser.key ${IUSER}@${EXT_IP} "sudo cp ${K8S_DIR}/conf/kubelet.service /etc/systemd/system/ && sudo cp ${K8S_DIR}/conf/kube-proxy.service /etc/systemd/system/"
+
+        echo ""
+        @go.log INFO "Starting K8S Services"
+        echo ""
+        ssh -i $OUT_KEY ${IUSER}@${EXT_IP} "${K8S_START_CMD}"
+        if [ "$K8S_START_CRI_CMD" != "" ]; then
+            ssh -i $OUT_KEY ${IUSER}@${EXT_IP} "$K8S_START_CRI_CMD"
+        fi
+        echo ""
+
+
+
+        TCNT=$(($TCNT + 1))
+    done
+
+}
+
+_k8sworkerinstall "$@"

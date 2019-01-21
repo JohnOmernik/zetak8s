@@ -10,20 +10,42 @@ function _status(){
 
     test_plat
 
-    ret_init_inst "SPOT_INSTS"
 
-    if [ "$SPOT_INSTS" != "" ]; then
+    echo "Checking Master Insts"
+    ret_init_inst "master" "MASTER_SPOT_INSTS"
+
+    if [ "$MASTER_SPOT_INSTS" != "" ]; then
         echo ""
-        echo "Checking the following SPOT_INSTS from ./bin/init_output.json"
-        echo "$SPOT_INSTS"
+        echo "Checking the following MASTER_SPOT_INSTS from ./bin/master_init_output.json"
+        echo ""
+        echo "$MASTER_SPOT_INSTS"
         echo ""
 
-        ret_init_ips "INST_STR" "$SPOT_INSTS" 1
+        ret_init_ips "MASTER_INST_STR" "$MASTER_SPOT_INSTS" 1
     fi
 
-    if [ "$INST_STR" != "" ]; then
+    if [ "$MASTER_INST_STR" != "" ]; then
         echo "Output Node string:"
-        echo "$INST_STR"
+        echo "$MASTER_INST_STR"
+    fi
+
+    echo ""
+    echo "Checking Worker Insts"
+    ret_init_inst "worker" "WORKER_SPOT_INSTS"
+
+    if [ "$WORKER_SPOT_INSTS" != "" ]; then
+        echo ""
+        echo "Checking the following WORKER_SPOT_INSTS from ./bin/worker_init_output.json"
+        echo ""
+        echo "$WORKER_SPOT_INSTS"
+        echo ""
+
+        ret_init_ips "WORKER_INST_STR" "$WORKER_SPOT_INSTS" 1
+    fi
+
+    if [ "$WORKER_INST_STR" != "" ]; then
+        echo "Output Node string:"
+        echo "$WORKER_INST_STR"
     fi
 
 

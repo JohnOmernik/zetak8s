@@ -1,0 +1,86 @@
+#!/bin/bash
+
+#
+# Craete a loadbalancer based on the provied information
+##
+sourceconf "$PLATFORM_CONF"
+sourceconf "$K8S_CONF"
+
+function _createlb(){
+
+    TARGET_IPS="$MASTER_NODES_INT_IP"
+    SNID=""
+    TGINSTS=""
+    if [ "$LBARN" != "" ]; then
+        @go.log FATAL "LBARN $LBARN Detected: Exiting"
+    fi
+    for TARG_IP in $(echo "$TARGET_IPS"|tr "," " "); do
+        ret_instance_data_by_internal_ip "$TARG_IP" "INST_ID" "SNCHK"
+        if [ "$TGINSTS" == "" ]; then
+            TGINSTS="Id=$INST_ID"
+        else
+            TGINSTS="$TGINSTS Id=$INST_ID"
+        fi
+        if [ "$SNID" == "" ]; then
+            SNID="$SNCHK"
+        else
+            if [ "$SNID" != "$SNCHK" ]; then
+                @go.log FATAL "Instances provided not in the same subnet, will not create LB"
+            fi
+        fi
+    done
+    echo "Target Insts: $TGINSTS"
+    echo "Subnet: $SNID"
+    # Step one create the Load Balancer
+    LBNAME="myk8slb"
+    LBSNID="$SNID"
+    LBPROT="TCP"
+    LBPORT="6443"
+    @go.log INFO "Creating Load Balancer"
+    # Create LB
+    create_network_lb "$LBNAME" "$LBSNID" "LBARN" "LBDNS" "LBVPC" "RES"
+    if [ "$RES" != "0" ]; then
+        @go.log FATAL "Load balancer creation failed - Exiting"
+    fi
+    @go.log INFO "Creating Target Group"
+    # Create Target Group
+    create_network_lb_targetgroup "$LBNAME" "$LBVPC" "$LBPROT" "$LBPORT" "TGARN" "RES"
+    if [ "$RES" != "0" ]; then
+        @go.log FATAL "Target group for LB $LBNAME did not get created - Exiting"
+    fi
+    @go.log INFO "Registering Target Insts"
+    # Register Target Groups
+    register_lb_targets "$TGARN" "$TGINSTS" "RES"
+    if [ "$RES" != "0" ]; then
+        @go.log FATAL "Target group Registration for LB $LBNAME did not go well - Exiting"
+    fi
+    @go.log INFO "Creating Load Balancer Listener"
+    # Create LB Listender
+    create_network_lb_listener "$LBARN" "$LBPROT" "$LBPORT" "$TGARN" "LISTENERARN" "RES"
+    if [ "$RES" != "0" ]; then
+        @go.log FATAL "Listener registration for $LBNAME did not go well - Exiting"
+    fi
+
+
+
+echo "Load Balancer Created: "
+echo "-----------------------"
+echo "LB DNS: $LBDNS"
+echo "LB Arn: $LBARN"
+echo "Target Group Arn: $TGARN"
+echo "Listener Arn: $LISTENERARN"
+echo ""
+echo "This information written to K8S Conf at $K8S_CONF"
+echo ""
+echo "-----------------------"
+echo "LBARN=\"$LBARN\"" >> $K8S_CONF
+echo "TGARN=\"$TGARN\"" >> $K8S_CONF
+echo "LISTENERARN=\"$LISTENERARN\"" >> $K8S_CONF
+echo "LBDNS=\"$LBDNS\"" >> $K8S_CONF
+echo "#" >> $K8S_CONF 
+
+}
+_createlb "$@"
+
+
+

@@ -4,21 +4,36 @@
 # Starts Nodes per the platform  conf
 ##
 sourceconf "$PLATFORM_CONF"
+
+
 function _start_nodes(){
 
-    write_spec_json
-    if [ -f "./bin/init_output.json" ]; then
-        echo "There appears to be a init_output.json already, not doing anything"
+    echo "Setting the Default region"
+    ${AWS_CMD} configure set region ${INIT_REGION}
+    echo "Setting up the masters"
+    write_spec_json "master"
+    if [ -f "./bin/master_init_output.json" ]; then
+        echo "There appears to be a master_init_output.json already, not doing anything"
     else
-        INST_OUT=$(aws ec2 request-spot-instances --spot-price "$INIT_TEMP_PRICE" --instance-count $INIT_NUM_NODES --type "one-time" --launch-specification file://./bin/specification.json)
-
-        echo "$INST_OUT" > ./bin/init_output.json
-
-        ret_init_inst "SPOT_INSTS"
-
-        echo "Created Spot Requests $SPOT_INSTS"
-        echo "Results outputted to init_output.json"
+        MASTER_INST_OUT=$(${AWS_CMD} ec2 request-spot-instances --spot-price "$INIT_TEMP_MASTER_PRICE" --instance-count $INIT_MASTER_NUM_NODES --type "one-time" --launch-specification file://./bin/master_specification.json)
+        echo "$MASTER_INST_OUT" > ./bin/master_init_output.json
+        ret_init_inst "master" "MASTER_SPOT_INSTS"
+        echo "Created Spot Requests $MASTER_SPOT_INSTS"
+        echo "Results outputted to master_init_output.json"
     fi
+    echo ""
+    echo "Setting up the workers"
+    write_spec_json "worker"
+    if [ -f "./bin/worker_init_output.json" ]; then
+        echo "There appears to be a worker_init_output.json already, not doing anything"
+    else
+        WORKER_INST_OUT=$(${AWS_CMD} ec2 request-spot-instances --spot-price "$INIT_TEMP_WORKER_PRICE" --instance-count $INIT_WORKER_NUM_NODES --type "one-time" --launch-specification file://./bin/worker_specification.json)
+        echo "$WORKER_INST_OUT" > ./bin/worker_init_output.json
+        ret_init_inst "worker" "WORKER_SPOT_INSTS"
+        echo "Created Spot Requests $WORKER_SPOT_INSTS"
+        echo "Results outputted to worker_init_output.json"
+    fi
+    echo ""
 
 }
 _start_nodes "$@"

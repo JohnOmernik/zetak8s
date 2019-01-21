@@ -1,0 +1,132 @@
+#!/bin/bash
+#
+# fs fsdocker - Install FS Docker Registry for Zeta
+#
+#
+
+sourceconf "$PLATFORM_CONF"
+sourceconf "$CA_CONF"
+sourceconf "$K8S_CONF"
+sourceconf "$PREP_CONF"
+#sourceconf "$HELM_CONF"
+sourceconf "$FS_CONF"
+
+
+
+@go.log INFO "Creating Certs for fsdocker"
+
+APP_IMG="registry:2"
+
+./zeta ca createcert -u -cn="$FS_DOCKER_FQDN"  -o="system:fs-docker"
+
+FS_CERT=$(cat ./conf/ca/certs/${FS_DOCKER_FQDN}.pem | base64 -w 0)
+FS_CERT_KEY=$(cat ./conf/ca/keys/${FS_DOCKER_FQDN}-key.pem | base64 -w 0)
+
+@go.log INFO "Creating Secret Yaml with Cert Info"
+cat > ./fs-docker.yaml << EOF
+apiVersion: v1
+data:
+  tls.crt: $FS_CERT
+  tls.key: $FS_CERT_KEY
+kind: Secret
+metadata:
+  name: $FS_DOCKER_HOSTNAME
+  namespace: $FS_DOCKER_NAMESPACE
+type: Opaque
+
+EOF
+@go.log INFO "Applying Cert Secret Yaml"
+./kubectl apply -f ./fs-docker.yaml
+if [ "$?" == "0" ]; then
+    echo "Secret Applied"
+    echo "Not Deleting"
+    rm ./fs-docker.yaml
+else
+    echo "Secret Failed fs-docker.yaml"
+    exit 1
+fi
+
+
+@go.log INFO "Creating K8S YAML File"
+
+cat > ./fs-docker-app.yaml << EOL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ${FS_DOCKER_HOSTNAME}
+  namespace: ${FS_DOCKER_NAMESPACE}
+  labels:
+    k8s-app: ${FS_DOCKER_HOSTNAME}
+spec:
+  selector:
+    k8s-app: ${FS_DOCKER_HOSTNAME}
+  ports:
+  - name: fsregistry
+    port: ${FS_DOCKER_PORT}
+    protocol: TCP
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: $FS_DOCKER_HOSTNAME
+  namespace: $FS_DOCKER_NAMESPACE
+  labels:
+    k8s-app: ${FS_DOCKER_HOSTNAME} 
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      k8s-app: ${FS_DOCKER_HOSTNAME}
+  template:
+    metadata:
+      labels:
+        k8s-app: ${FS_DOCKER_HOSTNAME}
+    spec:
+      containers:
+      - name: ${FS_DOCKER_HOSTNAME}
+        image: ${APP_IMG}
+        env:
+        - name: REGISTRY_HTTP_ADDR
+          value: "0.0.0.0:${FS_DOCKER_PORT}"
+        - name: REGISTRY_HTTP_TLS_CERTIFICATE
+          value: /app/secret/cert.pem
+        - name: REGISTRY_HTTP_TLS_KEY
+          value: /app/secret/key.pem
+        ports:
+        - containerPort: ${FS_DOCKER_PORT}
+        volumeMounts:
+        - name: fssecret
+          mountPath: /app/secret
+          readOnly: true
+        - name: docker-data
+          mountPath: /var/lib/registry
+      volumes:
+      - name: docker-data
+        hostPath:
+          path: /opt/fsdocker
+          type: DirectoryOrCreate
+      - name: fssecret
+        secret:
+          secretName: ${FS_DOCKER_HOSTNAME}
+          items:
+          - key: tls.crt
+            path: cert.pem
+          - key: tls.key
+            path: key.pem
+EOL
+
+
+@go.log INFO "Submitting FS Docker Reg to Kubernetes"
+./kubectl apply -f ./fs-docker-app.yaml
+if [ "$?" == "0" ]; then
+    echo "FS Docker Submitted Applied"
+    echo "Not Deleting"
+    rm ./fs-docker-app.yaml
+else
+    echo "FS Docker Submission Failed"
+    exit 1
+fi
+
+
+@go.log INFO "FS Docker Registry Running at $FS_DOCKER_URL"

@@ -1,0 +1,58 @@
+#!/bin/bash
+#
+# fs - Scripts to interact with the shared filesystem in Zeta
+#
+#
+
+sourceconf "$PLATFORM_CONF"
+sourceconf "$CA_CONF"
+sourceconf "$K8S_CONF"
+sourceconf "$PREP_CONF"
+#sourceconf "$HELM_CONF"
+
+function _fs() {
+
+    LOCK="0"
+    UNATTEND="0"
+    for i in "$@"
+    do
+    case $i in
+        -l)
+        LOCK="1"
+        ;;
+        -u)
+        UNATTEND="1"
+        ;;
+        *)
+            # unknown option
+        ;;
+    esac
+    done
+
+    initconf "$FS_CONF" "$UNATTEND"
+
+    echo ""
+    echo "********************************"
+    echo "Scripts should now be run on cluster"
+    echo "That should be: $INIT_NODE"
+    echo "********************************"
+    echo ""
+    echo "Commands to use with fs:"
+    echo ""
+    echo "./zeta fs fsdocker - Install the filesystem docker registry"
+    echo ""
+    echo "Provider Base:"
+    echo "./zeta fs $FS_PROVIDER"
+    echo ""
+    echo "./zeta fs -l lock or unlock  fs.conf file"
+    echo ""
+
+
+    if [ "$LOCK" == "1" ]; then
+       lockconf "$FS_CONF"
+    fi
+
+}
+
+_fs "$@"
+

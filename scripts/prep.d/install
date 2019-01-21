@@ -13,7 +13,9 @@
 # ./zeta prep instlal -a -u # Run node prep on all nodes, but do in parallel and unattended.
 #
 sourceconf "$PREP_CONF"
-
+sourceconf "$PLATFORM_CONF"
+sourceconf "$K8S_CONF"
+sourceconf "$CA_CONF"
 
 
 function _displayhelp(){
@@ -64,41 +66,22 @@ function _prepinstall() {
 
 
     if [ "$ALL" == "1" ]; then
-        RUN_NODES="$NODES"
+        RUN_NODES=$(echo -n "$ALL_NODES_EXT_IP"|tr "," " ")
     else
         # Add the Host to the list of nodes if it doesn't exist
-        addtoconfvar "$HOST" " " "NODES" "$PREP_CONF"
-        RUN_NODES="$HOST"
+        echo "We need to do better about adding a node. We don't support single node adds yet"
+        exit 1
     fi
 
-    INITSKIP="N"
 
     for NODE in $RUN_NODES; do
-        if [ "$NODE" == "$INIT_NODE" ]; then
-            @go.log INFO "Skipping INIT_NODE ($INIT_NODE) to prep this node at the end of the run"
-            INITSKIP="Y"
+        ./zeta prep userprep -n="$NODE"
+        if [ "$UNATTEND" == "1" ]; then
+            ./zeta prep systemprep -n="$NODE" -u
         else
-            ./zeta prep userprep -n="$NODE"
-            if [ "$UNATTEND" == "1" ]; then
-                ./zeta prep systemprep -n="$NODE" -u
-            else
-                ./zeta prep systemprep -n="$NODE"
-            fi
+            ./zeta prep systemprep -n="$NODE"
         fi
     done
-    if [ "$INITSKIP" == "Y" ]; then
-        @go.log INFO "Running on Skipped Init Node ($INIT_NODE)"
-        @go.log WARN "When this node is complete, it will likely lose the SSH Connection - This is normal - it's the node rebooting"
-        ./zeta prep userprep -n="$INIT_NODE"
-        if [ "$UNATTEND" == "1" ]; then
-            ./zeta prep systemprep -n="$INIT_NODE" -u
-        else
-            ./zeta prep systemprep -n="$INIT_NODE"
-        fi
-        echo ""
-        echo ""
-        @go.log INFO "To check prep install status please run $ ./zeta prep status"
-    fi
 }
 
 _prepinstall "$@"

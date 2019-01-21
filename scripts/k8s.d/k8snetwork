@@ -1,0 +1,19 @@
+#!/bin/bash
+
+#
+# Sets up Network for K8s cluster
+#
+sourceconf "$PLATFORM_CONF"
+sourceconf "$CA_CONF"
+sourceconf "$K8S_CONF"
+sourceconf "$PREP_CONF"
+
+function _k8snetwork(){
+    @go.log INFO "Installing selected libcni: $K8S_CNI_PROV"
+    installcniyaml
+    sleep 5
+}
+_k8snetwork "$@"
+
+
+
