@@ -102,13 +102,14 @@ function _platformcreateconf() {
         echo ""
         read -e -p "Please enter the platform lib choice: " -i "$DEF_PLATFORM" PLATFORM
     fi
-    if [ -f ".scripts/lib/$PLATFORM" ]; then
+    PLAT_LIB="./scripts/lib/$PLATFORM"
+    if [ -f "$PLAT_LIB" ]; then
         echo "Loading Platform Modules"
         . "$_GO_USE_MODULES" $PLATFORM
         PLAT_CMD=${T_PLAT_CMD:-$DEFAULT_PLAT_CMD}
         PLAT_VER="$PLAT_CMD $DEFAULT_PLAT_VER"
     else
-        echo "Platform file $PLATFORM not found at ./script/lib - Exiting"
+        echo "Platform file $PLATFORM not found at $PLAT_LIB - Exiting"
         exit 1
     fi
 
