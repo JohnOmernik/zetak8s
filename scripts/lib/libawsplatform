@@ -23,6 +23,8 @@ DEFAULT_INIT_ZONE="ANY"
 DEFAULT_INIT_REGION="us-west-2"
 DEFAULT_INIT_IMG="ami-0bbe6b35405ecebdb" # Ubuntu 18.04
 
+DEFAULT_DNS_UPSTREAM="172.31.0.2"
+
 function plat_install(){
     echo "--------------------------------------------"
     echo "aws command not found, attempting to install"

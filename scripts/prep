@@ -20,16 +20,13 @@ function _prep() {
         -l|--lockconf)
         LOCK="1"
         ;;
-        -u)
-        UNATTEND="1"
-        ;;
         *)
             # unknown option
         ;;
     esac
     done
 
-    initconf "$PREP_CONF" "$UNATTEND"
+    initconf "$PREP_CONF" "$@"
 
     echo "Commands to use with prep:"
     echo ""

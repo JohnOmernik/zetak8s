@@ -285,7 +285,7 @@ INIT_TEMP_MASTER_PRICE="$INIT_TEMP_MASTER_PRICE"
 INIT_TEMP_WORKER_PRICE="$INIT_TEMP_WORKER_PRICE"
 
 # If this is set to 1, scripts will assume "Use" when the conf exists.
-PLATFORM_LOCKED="0"
+PLATFORM_LOCKED="1"
 EOF
     @go.log INFO "Platform Conf file written to $PLATFORM_CONF"
 

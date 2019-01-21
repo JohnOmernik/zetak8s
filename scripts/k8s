@@ -10,15 +10,11 @@ sourceconf "$PLATFORM_CONF"
 function _k8s() {
 
     LOCK="0"
-    UNATTEND="0"
     for i in "$@"
     do
     case $i in
         -l)
         LOCK="1"
-        ;;
-        -u)
-        UNATTEND="1"
         ;;
         *)
             # unknown option
@@ -26,12 +22,11 @@ function _k8s() {
     esac
     done
 
-    initconf "$K8S_CONF" "$UNATTEND"
+    initconf "$K8S_CONF" "$@"
 
     echo ""
     echo "********************************"
-    echo "It is highly advised to run the k8s  Scripts on the cluster initial node specified in the prep stage"
-    echo "That should be: $INIT_NODE"
+    echo "Zeta K8s Setup"
     echo "********************************"
     echo ""
     echo "Commands to use with k8s:"
