@@ -107,7 +107,7 @@ function _platformcreateconf() {
         echo "Loading Platform Modules"
         . "$_GO_USE_MODULES" $PLATFORM
         PLAT_CMD=${T_PLAT_CMD:-$DEFAULT_PLAT_CMD}
-        PLAT_VER="$PLAT_CMD $DEFAULT_PLAT_VER"
+        PLAT_VER="\$PLAT_CMD $DEFAULT_PLAT_VER"
     else
         echo "Platform file $PLATFORM not found at $PLAT_LIB - Exiting"
         exit 1
