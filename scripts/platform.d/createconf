@@ -251,15 +251,19 @@ cat > $PLATFORM_CONF << EOF
 
 # INIT_USER is the user to connect to the cluster in order to establish the initial users, and installs for Zeta
 INIT_USERS="$INIT_USERS"
+
 # INIT_KEY_LOC is the location of the SSH private key to connect to the cluster with
 INIT_KEY_LOC="$INIT_KEY_LOC"
 INIT_KEY_NAME="$INIT_KEY_NAME"
+
 #PLATFORM
 PLATFORM="$PLATFORM"
 . "\$_GO_USE_MODULES" \$PLATFORM
+
 # Interfaces to check for internal IPs (in order)
 INTERFACE_LIST="$INTERFACE_LIST"
 
+# Platform Commands and default version command
 PLAT_CMD="$PLAT_CMD"
 PLAT_VER="$PLAT_VER"
 
@@ -272,6 +276,7 @@ INIT_DATA_SIZE="$INIT_DATA_SIZE"
 INIT_NUM_DATA_VOL="$INIT_NUM_DATA_VOL"
 INIT_INST_MASTER_TYPE="$INIT_INST_MASTER_TYPE"
 INIT_INST_WORKER_TYPE="$INIT_INST_WORKER_TYPE"
+
 INIT_ZONE="$INIT_ZONE"
 INIT_REGION="$INIT_REGION"
 INIT_IMG="$INIT_IMG"
