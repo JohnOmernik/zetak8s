@@ -108,7 +108,7 @@ function _platformcreateconf() {
         echo "Loading Platform Modules"
         . "$_GO_USE_MODULES" $PLATFORM
         PLAT_CMD=${T_PLAT_CMD:-$DEFAULT_PLAT_CMD}
-        PLAT_VER="\$PLAT_CMD $DEFAULT_PLAT_VER"
+        PLAT_VER=${DEFAULT_PLAT_VER}
     else
         echo "Platform file $PLATFORM not found at $PLAT_LIB - Exiting"
         exit 1
@@ -170,7 +170,6 @@ function _platformcreateconf() {
     echo "The Platform command for your choosen platform is: $PLAT_CMD, we will now check to see if we can run $PLAT_CMD $PLAT_VER"
     echo ""
     $PLAT_CMD $PLAT_VER
-    echo ""
     if [ "$?" != "0" ]; then
         echo "The platform version command returned an error rather than a version. We will not attemp to run the default platform install"
         plat_install
