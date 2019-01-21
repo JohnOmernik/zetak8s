@@ -30,7 +30,7 @@ function plat_install(){
     curl -O https://bootstrap.pypa.io/get-pip.py
     python3 get-pip.py --user
     pip install awscli --upgrade --user
-    $PLAT_VER
+    $PLAT_CMD $PLAT_VER
     if [ "$?" != "0" ]; then
         echo "We were unable to get the platform command $PLAT_CMD installed.  Please manually install before proceeding. Also ensure it's in the path correctly, or update the PLAT_CMD to be a absoluate path"
     else
