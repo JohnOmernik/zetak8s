@@ -4,70 +4,130 @@
 #
 # No arguments are called here
 
-
-UNATTEND="$1"
 sourceconf "$PLATFORM_CONF"
-. "$_GO_USE_MODULES" $PLATFORM
-echo ""
-echo "-----------------------------------"
-echo "This process will ask a series of questions in order to create a prep_conf.conf script for gettings nodes ready for Zeta"
-echo "The configuration will be located: $PREP_CONF"
-echo "-----------------------------------"
-echo ""
-GEN_KEY="Y"
-OUT_KEY="./conf/iuser.key"
-OUT_KEY_PUB="./conf/iuser.key.pub"
-echo ""
-echo "As part of this process, we will generate a key for the IUSER user"
-echo "It will be stored at $OUT_KEY and its public key will be stored at $OUT_KEY_PUB"
-echo "These values will be saved in the conf for use as well"
-echo ""
-IUSER_UID="2500"
-#FSUSER_UID="2000"
-IUSER="zetaadm" # The Main User for Zeta
-#FSUSER="mapr"   # The filesystem user for Zeta
-echo "We will create two users, one fore node to node setup, another for the filesystem"
-echo "By default these users are:"
-echo "Initial User (IUSER): $IUSER - UID: $IUSER_UID"
-#echo "FS User (FSUSER): $FSUSER - UID: $FSUSER_UID"
-echo ""
-echo "-----------------------------------"
-echo "We will not get passwords for the users"
-echo ""
-if [ "$UNATTEND" == "1" ]; then
-    IUSER_PASS="mypass"
-else
-    getpass "$IUSER" IUSER_PASS
-fi
-echo ""
-#if [ "$UNATTEND" == "1" ]; then
-#    FSUSER_PASS="mypass"
-#else
-#    getpass "$FSUSER" FSUSER_PASS
-#fi
-echo ""
-#echo "-----------------------------------"
-#echo "Please enter the list of nodes we will be preparing for Zeta, the nodes should be space separated"
-#echo ""
-#read -e -p "Enter list of space separated nodes for use in Zeta: " NODES
-#echo ""
-#echo "In setting up Zeta, we like to select an 'Initial' node that can be used as the node that all the scripts run from. It should be an agent node"
-#echo ""
-#read -e -p "Enter initial node for Zeta install: " INIT_NODE
-#echo ""
-#echo ""
-echo ""
-echo "-----------------------------------"
-echo "Privileged actions typically require sudo.  In a default install we need the $IUSER account to have sudo on all nodes"
-echo "This is not always possible in various environments, so we provide an option to replace sudo with a privileged command of your choice"
-echo "This maybe something like pbrun, instead of running sudo %cmd it would run pbrun %cmd"
-echo "This is where you can choose the privilege escalation method"
-echo ""
-if [ "$UNATTEND" == "1" ]; then
-    PRIV_CMD="sudo"
-else
-    read -e -p "Privilege Escalation command: " -i "sudo" PRIV_CMD
-fi
+sourceconf "$CA_CONF"
+sourceconf "$K8S_CONF"
+
+function _prepcreateconf() {
+
+    DEF_GEN_KEY="Y"
+    DEF_OUT_KEY="./conf/iuser.key"
+    DEF_IUSER="zetaadm"
+    DEF_IUSER_UID="2500"
+    DEF_IUSER_PASS_FILE="./conf/iuser.pass"
+    DEF_PRIV_CMD="sudo"
+    CURUSER=$(whoami)
+
+    UNATTEND="0"
+
+    for i in "$@"
+    do
+    case $i in
+        -u)
+        UNATTEND="1"
+        ;;
+        -nk)
+        T_GEN_KEY="N"
+        ;;
+        "-ok="*)
+        T_OUT_KEY="${i#*=}"
+        ;;
+        "-iu="*)
+        T_IUSER="${i#*=}"
+        ;;
+        "-iuu="*)
+        T_IUSER_UID="${i#*=}"
+        ;;
+        "-iup="*)
+        T_IUSER_PASS_FILE="${i#*=}"
+        ;;
+        "-pc="*)
+        T_PRIV_CMD="${i#*=}"
+        ;;
+        *)
+    esac
+    done
+
+    echo ""
+    echo "-----------------------------------"
+    echo "This process will ask a series of questions in order to create a prep_conf.conf script for gettings nodes ready for Zeta"
+    echo "The configuration will be located: $PREP_CONF"
+    echo "-----------------------------------"
+    echo ""
+
+    if [ "$UNATTEND" == "1" ]; then
+        GEN_KEY=${T_GEN_KEY:-$DEF_GEN_KEY}
+        OUT_KEY=${T_OUT_KEY:-$DEF_OUT_KEY}
+        OUT_KEY_PUB="${OUT_KEY}.pub"
+        IUSER=${T_IUSER:-$DEF_IUSER}
+        IUSER_UID=${T_IUSER_UID:-$DEF_IUSER_UID}
+        IUSER_PASS_FILE=${T_IUSER_PASS_FILE:-$DEF_IUSER_PASS_FILE}
+        PRIV_CMD=${T_PRIV_CMD:-$DEF_PRIV_CMD}
+
+        if [ ! -f "$IUSER_PASS_FILE" ]; then
+            echo "We need a password and the file $IUSER_PASS_FILE does not exist - If you just hit enter here, we will exit (no blank passwords!)"
+            getpass "$IUSER" IUSER_PASS
+            if [ "$IUSER_PASS" == "" ]; then
+                echo "We will not continue with a blank password - exiting"
+                exit 1
+            fi
+        else
+            IUSER_PASS=$(cat $IUSER_PASS_FILE|tr "\n" "")
+        fi
+    else
+        echo "We user a new user with a key/pair that can be generated at install time to install on every system in Zeta"
+        echo "If you choose to not generate a key pair, and the key location you specify does not exist, we will exit and fail"
+        echo "If you choose to generate a keypair the keys already exist, we will also exit and fail"
+        echo ""
+        echo "Using Defaults here is recommended and will work"
+        echo ""
+        read -e -p "Do you wish to generate a rsa keypair for the installed user on Zeta? (Y/N): " -i "$DEF_GEN_KEY" GEN_KEY
+        echo ""
+        read -e -p "Where is the keypair to be stored: " -i "$DEF_OUT_KEY" OUT_KEY
+        OUT_KEY_PUB="${OUT_KEY}.pub"
+        echo ""
+        if [ "$GEN_KEY" == "Y" ]; then
+            if [ -f "$OUT_KEY" ] then
+                echo "GEN_KEY set to Y but a key already exists in $OUT_KEY - Exiting"
+                exit 1
+            fi
+            echo ""
+            echo "As part of this process, we will generate a key for the IUSER user"
+            echo "It will be stored at $OUT_KEY and its public key will be stored at $OUT_KEY_PUB"
+            echo "These values will be saved in the conf for use as well"
+            echo ""
+        else
+            if [ ! -f [ "$OUT_KEY" ]; then
+                echo "You have selected to not generated a key, and there is no key at $OUT_KEY - exiting"
+            fi
+        fi
+        echo "IUSER is the user we install on all nodes that has sudo access and allows us to lock things down (not use root)"
+        echo "You may specify what this user is, it's UID and pass"
+        echo ""
+        read -e -p "What is the name of the administrative IUSER: " -i "$DEF_IUSER" IUSER
+        echo ""
+        read -e -p "What is the UID of the administrative IUSER: " -i "$DEF_IUSER_UID" IUSER_UID
+        echo ""
+        read -e -p "File to read password from: " -i "$DEF_IUSER_PASS_FILE" IUSER_PASS_FILE
+        echo ""
+        if [ ! -f "$IUSER_PASS_FILE" ]; then
+            echo "No pass file found at $IUSER_PASS_FILE - Please enter the password here (no blank passwords!)"
+            getpass "$IUSER" IUSER_PASS
+            if [ "$IUSER_PASS" == "" ]; then
+                echo "We will not continue with a blank password"
+                exit 1
+            fi
+        else
+            IUSER_PASS=$(cat $IUSER_PASS_FILE|tr "\n" "")
+        fi
+        echo ""
+        echo "Privileged actions typically require sudo.  In a default install we need the $IUSER account to have sudo on all nodes"
+        echo "This is not always possible in various environments, so we provide an option to replace sudo with a privileged command of your choice"
+        echo "This maybe something like pbrun, instead of running sudo %cmd it would run pbrun %cmd"
+        echo "This is where you can choose the privilege escalation method"
+        echo ""
+        read -e -p "Privilege Escalation command: " -i "sudo" PRIV_CMD
+    fi
 
 touch $PREP_CONF
 chmod 640 $PREP_CONF
@@ -78,8 +138,11 @@ cat > $PREP_CONF << EOF
 # Configuration script for prepping nodes for Zeta Architecture
 
 # The Main user for Zeta  (zetaadm by default)
+
 IUSER="$IUSER"
-#FSUSER="$FSUSER"
+IUSER_UID="$IUSER_UID"
+IUSER_PASS="$IUSER_PASS"
+
 # The Privilege Escalation command
 PRIV_CMD="$PRIV_CMD"
 # The following Variables determine whether to generate a key for IUSER, what that key will be called, and what the public key will be called
@@ -87,24 +150,13 @@ GEN_KEY="$GEN_KEY"
 OUT_KEY="$OUT_KEY"
 OUT_KEY_PUB="$OUT_KEY_PUB"
 
-# The UIDs for IUSER and FSUSER
-IUSER_UID="$IUSER_UID"
-#FSUSER_UID="$FSUSER_UID"
-
-# Passwords for FSUSER and IUSER
-#FSUSER_PASS="$FSUSER_PASS"
-IUSER_PASS="$IUSER_PASS"
-
-# Node list to prep
-NODES="$NODES"
-
-# Interfaces to check for internal IPs (in order)
-INTERFACE_LIST="$INTERFACE_LIST"
-
 # If this is set to 1, scripts will assume "Use" when the conf exists.
-PREP_LOCKED="0"
+PREP_LOCKED="1"
 
 EOF
 
-@go.log INFO "Prep Conf file written to $PREP_CONF"
+    @go.log INFO "Prep Conf file written to $PREP_CONF"
+}
 
+
+_prepcreateconf "$@"

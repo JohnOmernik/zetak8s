@@ -105,10 +105,13 @@ This is a platform specific setup that allows you to connect to all the nodes ea
 
 ## Prep the nodes
 ----
-These scripts do some basic install based on the OS of the nodes. 
+These scripts do some basic install based on the OS as well as installing the non-root admin user
 ### Run the prep.conf install
 -------
-Asks some questions about the setup
+Asks some questions about the setup.  If you want this to be truly automated, you do need to create a password file in the ./conf directory.  The default is iuser.pass put the password on the first line. 
+
+Note: chmod 600 this file for better security. If you want to use a different file you can specify it's location. 
+
 ```
 ./zeta prep
 ```
