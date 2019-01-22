@@ -10,7 +10,7 @@ sourceconf "$CA_CONF"
 
 DEF_K8S_VER="v1.12.4"
 DEF_ETCD_VER="v3.3.6"
-DEF_KUBCTL="./bin/kubectl"
+DEF_KUBECTL="./bin/kubectl"
 DEF_CLUSTERNAME="myk8s"
 DEF_CLUSTERBASE="mapr"
 DEF_CLUSTER_DNS_IP="10.32.0.10"
