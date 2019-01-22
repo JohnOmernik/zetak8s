@@ -16,7 +16,8 @@ In learning how to create a cluster and document it this way, I have also realiz
 - Big shout out to Mike Bland who right go-script-bash which this is based: https://mike-bland.com/2017/10/08/go-script-bash-v1.7.0.html
   - I am using a relatively old verion, may try with a new version here to get things up to date. 
 - Shout out to kelseyhightower who's repo: https://github.com/kelseyhightower/kubernetes-the-hard-way  is what this is loosly based on. It's how I learned to do the Kubernetes
-- 
+- Why Zeta? Jim Scott, a colleague and friend of mine coined the term for a Distributed Compute Engine working hand in hand with a Distributed Filesystem (Both Jim and I like MapR for this!)  He coined the phrase orginally for MapR and Mesos, but I just continued with the idea for Kubernetes.  
+  - This is the first step to a "Zeta" cluster. Getting Kubernetes working well. Next steps will include MapR on the cluster for a distributed filesystem!
 
 ## Instructions
 ----
@@ -39,7 +40,18 @@ There are number of things I haven't done or considered yet.
   - libcniflannel - Working
 - Right now, only Ubuntu 18.04 from aws is working. I'd like to get the scripts for prep working better with other OS so we can quickly test those. I may even use lib?
 - More documentation of the individual scripts. I'd like help screens on all of them, just need to write them, or have someone help me with that. 
+- More Dockerization of core components. Right now, etcd, and kubernetes binaries are running directly on the nodes. 
+    - Explore which ones could be made to run in docker. EtcD should be no problem.. but could core Kubernetes components run in Docker as well? 
+    - Goal is to streamline and simplify the bootstrap of the nodes so that joining the zeta cluster is easy. 
+- Create scripts for adding new nodes later and removing nodes later. 
+- Create scripts for management/patching functions. I.e. Telling a node to start draining to patch. 
+- Install UIs for Cluster management visualization
+- Install Distributed Filesystem (MapR)
+- Create Ecosystem for installed apps to install on this cluster and utilzed Distributed Filesystem
+- Clean up spelling/grammar in README, INSTRUCTIONS, and scripts themselves
+- Always clean up/slim down make easier for all to understand (If something is unclear, please put an issue in, I will address very quickly)
 - ?
+
 
 
 
