@@ -18,7 +18,7 @@ In learning how to create a cluster and document it this way, I have also realiz
 - Shout out to kelseyhightower who's repo: https://github.com/kelseyhightower/kubernetes-the-hard-way  is what this is loosly based on. It's how I learned to do the Kubernetes
 - Why Zeta? Jim Scott, a colleague and friend of mine coined the term for a Distributed Compute Engine working hand in hand with a Distributed Filesystem (Both Jim and I like MapR for this!)  He coined the phrase orginally for MapR and Mesos, but I just continued with the idea for Kubernetes.  
   - This is the first step to a "Zeta" cluster. Getting Kubernetes working well. Next steps will include MapR on the cluster for a distributed filesystem!
-
+  - A talk Jim gave on Zeta at London Strata: https://mapr.com/resources/videos/using-zeta-architecture-jim-scott-strata-london-2015/
 ## Instructions
 ----
 [Instructions for getting this working with AWS can be found here](INSTRUCTIONS.md)
