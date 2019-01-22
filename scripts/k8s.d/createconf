@@ -11,6 +11,7 @@ sourceconf "$CA_CONF"
 DEF_K8S_VER="v1.12.4"
 DEF_ETCD_VER="v3.3.6"
 DEF_KUBECTL="./bin/kubectl"
+DEF_PATH_KUBECTL="Y"
 DEF_CLUSTERNAME="myk8s"
 DEF_CLUSTERBASE="mapr"
 DEF_CLUSTER_DNS_IP="10.32.0.10"
@@ -34,6 +35,9 @@ function _k8screateconf() {
     case $i in
         -u)
         UNATTEND="1"
+        ;;
+        -npk)
+        T_PATH_KUBECTL="N"
         ;;
         "-kv="*)
         T_K8S_VER="${i#*=}"
@@ -96,13 +100,15 @@ function _k8screateconf() {
         KUBECTL=${T_KUBECTL:-$DEF_KUBECTL}
         CLUSTERNAME=${T_CLUSTERNAME:-$DEF_CLUSTERNAME}
         CLUSTERBASE=${T_CLUSTERBASE:-$DEF_CLUSTERBASE}
-
+        PATH_KUBECTL=${T_PATH_KUBECTL:-$DEF_PATH_KUBECTL}
     else
         read -e -p "Please type the version of K8s you'd like to install: " -i "$DEF_K8S_VER" K8S_VER
         echo ""
         read -e -p "Please type the version of etcd you would like to use with kubernetes: " -i "$DEF_ETCD_VER" ETCD_VER
         echo ""
         read -e -p "Please enter the kubectl location (if it doesn't exist, we will download it" -i "$DEF_KUBECTL" KUBECTL
+        echo ""
+        read -e -p "Do you wish to make a link to kubectl in /usr/bin (recommended but requires sudo) (Y/N): " -i "$DEF_PATH_KUBECTL" PATH_KUBECTL
         echo ""
         read -e -p "Please enter your kubernetes cluster name: " -i "$DEF_CLUSTERNAME" CLUSTERNAME
         echo ""
@@ -122,7 +128,18 @@ function _k8screateconf() {
         mv kubectl $KUBECTL
         chmod +x $KUBECTL
     fi
-
+    if [ "$PATH_KUBECTL" == "Y" ]; then
+        if [ -f "/usr/bin/kubectl" ]; then
+            echo "Removing previous /usr/bin/kubectl"
+            sudo rm /usr/bin/kubectl
+        fi
+        echo "Creating link to $KUBECTL at /usr/bin/kubectl"
+        MYDIR=$(pwd)
+        cd ./bin
+        CURDIR=$(pwd)
+        cd $MYDIR
+        sudo ln -s ${CURDIR}/kubectl /usr/bin/kubectl
+    fi
 
     echo ""
     echo "-----------------------------------"
@@ -352,14 +369,19 @@ ETCD_URL="${ETCD_URL}"
 ETCD_DIR="${ETCD_DIR}"
 ETCD_STATUS_CMD="${ETCD_STATUS_CMD}"
 
+# Path to Kubectl
 KUBECTL="$KUBECTL"
 
+# IP Info
 K8S_CIDR_POD="$K8S_CIDR_POD"
 K8S_CIDR_SERVICE="$K8S_CIDR_SERVICE"
 K8S_CIDR_CLUSTER="$K8S_CIDR_CLUSTER"
+
+# Service Port Info
 K8S_PORT_START_SERVICE="$K8S_PORT_START_SERVICE"
 K8S_PORT_END_SERVICE="$K8S_PORT_END_SERVICE"
 
+# K8S Versions
 K8S_VER="${K8S_VER}"
 K8S_BASE="${K8S_BASE}"
 K8S_DIR="${K8S_DIR}"
@@ -369,17 +391,20 @@ K8S_BIN_DIR="${K8S_BIN_DIR}"
 ZETA_PROXY="$ZETA_PROXY"
 ZETA_NOPROXY="$ZETA_NOPROXY"
 
+# DNS Info
 DNS_UPSTREAM="$DNS_UPSTREAM"
 DNS_RESOLVERS="$DNS_RESOLVERS"
 DNS_SEARCH="$DNS_SEARCH"
 CLUSTER_DNS_IP="${CLUSTER_DNS_IP}"
 CLUSTER_DOMAIN="${CLUSTER_DOMAIN}"
 REVERSE_CIDRS="${REVERSE_CIDRS}"
+
 #Cluster Mount Points
 CLUSTERBASE="$CLUSTERBASE"
 CLUSTERNAME="$CLUSTERNAME"
 CLUSTERMOUNT="$CLUSTERMOUNT"
 
+# CNI and CRI Info
 CNI_CONF_DIR="$CNI_CONF_DIR"
 CNI_BIN_DIR="$CNI_BIN_DIR"
 
