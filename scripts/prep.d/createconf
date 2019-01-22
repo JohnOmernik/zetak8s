@@ -72,7 +72,7 @@ function _prepcreateconf() {
                 exit 1
             fi
         else
-            IUSER_PASS=$(cat $IUSER_PASS_FILE|tr "\n" "")
+            IUSER_PASS=$(cat $IUSER_PASS_FILE|tr -d "\n")
         fi
     else
         echo "We user a new user with a key/pair that can be generated at install time to install on every system in Zeta"
@@ -118,7 +118,7 @@ function _prepcreateconf() {
                 exit 1
             fi
         else
-            IUSER_PASS=$(cat $IUSER_PASS_FILE|tr "\n" "")
+            IUSER_PASS=$(cat $IUSER_PASS_FILE|tr -d "\n")
         fi
         echo ""
         echo "Privileged actions typically require sudo.  In a default install we need the $IUSER account to have sudo on all nodes"
