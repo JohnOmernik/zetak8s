@@ -226,7 +226,7 @@ function _k8screateconf() {
         echo ""
         read -e -p "Please enter the reverse DNS cidrs: " -i "$DEF_REVERSE_CIDRS" REVERSE_CIDRS
         echo ""
-        read -e -p "Please enter the name of the cluster domain: " -i "$DEF_CLUSTER_DOMAIN CLUSTER_DOMAIN
+        read -e -p "Please enter the name of the cluster domain: " -i "$DEF_CLUSTER_DOMAIN" CLUSTER_DOMAIN
         echo ""
         echo "Cluster proxies. If your cluster needs HTTP_PROXY information to connect to the Internet, now is the time to enter that"
         echo "We will ask for both Proxy information, as well as NOPROXY information"
