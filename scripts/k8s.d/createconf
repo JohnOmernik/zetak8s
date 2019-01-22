@@ -287,7 +287,7 @@ function _k8screateconf() {
         exit 1
     fi
     K8S_CNI_PROV="libcni${CNI_PROV}"
-    K8S_CNU_PROV_LOC="./script/lib/$K8S_CNI_PROV"
+    K8S_CNI_PROV_LOC="./script/lib/${K8S_CNI_PROV}"
     if [ ! -f "${K8S_CNI_PROV_LOC}" ]; then
         echo "Cannot find $K8S_CNI_PROV_LOC: Exiting"
         exit 1
