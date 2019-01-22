@@ -138,13 +138,13 @@ cat > $PREP_CONF << EOF
 # Configuration script for prepping nodes for Zeta Architecture
 
 # The Main user for Zeta  (zetaadm by default)
-
 IUSER="$IUSER"
 IUSER_UID="$IUSER_UID"
 IUSER_PASS="$IUSER_PASS"
 
 # The Privilege Escalation command
 PRIV_CMD="$PRIV_CMD"
+
 # The following Variables determine whether to generate a key for IUSER, what that key will be called, and what the public key will be called
 GEN_KEY="$GEN_KEY"
 OUT_KEY="$OUT_KEY"
