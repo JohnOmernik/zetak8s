@@ -87,7 +87,7 @@ function _prepcreateconf() {
         OUT_KEY_PUB="${OUT_KEY}.pub"
         echo ""
         if [ "$GEN_KEY" == "Y" ]; then
-            if [ -f "$OUT_KEY" ] then
+            if [ -f "$OUT_KEY" ]; then
                 echo "GEN_KEY set to Y but a key already exists in $OUT_KEY - Exiting"
                 exit 1
             fi
