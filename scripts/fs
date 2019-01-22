@@ -20,16 +20,13 @@ function _fs() {
         -l)
         LOCK="1"
         ;;
-        -u)
-        UNATTEND="1"
-        ;;
         *)
             # unknown option
         ;;
     esac
     done
 
-    initconf "$FS_CONF" "$UNATTEND"
+    initconf "$FS_CONF" "$@"
 
     echo ""
     echo "********************************"
