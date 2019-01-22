@@ -49,7 +49,7 @@ picasso_notes.txt
 
 # Files that created on install
 kubectl
-helm
+./helm
 
 
 # Any Key files should be ignored
