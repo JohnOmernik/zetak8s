@@ -128,17 +128,20 @@ function _k8screateconf() {
         mv kubectl $KUBECTL
         chmod +x $KUBECTL
     fi
+    MYDIR=$(pwd)
+
+cat > ${MYDIR}/kubectl << EOK
+#!/bin/bash
+${MYDIR}/bin/kubectl --kubeconfig ${MYDIR}/conf/k8s/admin/admin_ext.kubeconfig "$@"
+EOK
+    chmod +x ${MYDIR}/kubectl
     if [ "$PATH_KUBECTL" == "Y" ]; then
         if [ -f "/usr/bin/kubectl" ]; then
             echo "Removing previous /usr/bin/kubectl"
             sudo rm /usr/bin/kubectl
         fi
         echo "Creating link to $KUBECTL at /usr/bin/kubectl"
-        MYDIR=$(pwd)
-        cd ./bin
-        CURDIR=$(pwd)
-        cd $MYDIR
-        sudo ln -s ${CURDIR}/kubectl /usr/bin/kubectl
+        sudo ln -s ${MYDIR}/kubectl /usr/bin/kubectl
     fi
 
     echo ""

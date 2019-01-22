@@ -195,7 +195,7 @@ EOF
     sleep 5
     @go.log INFO "Check for running pods with:"
     echo ""
-    echo "./bin/kubectl --kubeconfig ./conf/k8s/admin/admin_ext.kubeconfig get pods -n kube-system"
+    echo "kubectl get pods -n kube-system"
 
 }
 _k8scoredns "$@"
