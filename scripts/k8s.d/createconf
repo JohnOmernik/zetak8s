@@ -132,7 +132,7 @@ function _k8screateconf() {
 
 cat > ${MYDIR}/kubectl << EOK
 #!/bin/bash
-${MYDIR}/bin/kubectl --kubeconfig ${MYDIR}/conf/k8s/admin/admin_ext.kubeconfig "$@"
+${MYDIR}/bin/kubectl --kubeconfig ${MYDIR}/conf/k8s/admin/admin_ext.kubeconfig "\$@"
 EOK
     chmod +x ${MYDIR}/kubectl
     if [ "$PATH_KUBECTL" == "Y" ]; then

@@ -12,6 +12,7 @@ In learning how to create a cluster and document it this way, I have also realiz
 
 ## Notes/Conventions
 ----
+- This uses bash and relies on a sane bash like that in Ubuntu. I hope your bash is good (not a mac bash) :) 
 - When I say aws in here, I am still installing Kubernetes from scratch, not getting pre provisioned aws kubernetes cluster
 - Big shout out to Mike Bland who right go-script-bash which this is based: https://mike-bland.com/2017/10/08/go-script-bash-v1.7.0.html
   - I am using a relatively old verion, may try with a new version here to get things up to date. 
@@ -50,6 +51,7 @@ There are number of things I haven't done or considered yet.
 - Create Ecosystem for installed apps to install on this cluster and utilzed Distributed Filesystem
 - Clean up spelling/grammar in README, INSTRUCTIONS, and scripts themselves
 - Always clean up/slim down make easier for all to understand (If something is unclear, please put an issue in, I will address very quickly)
+- Fix Mac Bash issues maybe?
 - ?
 
 

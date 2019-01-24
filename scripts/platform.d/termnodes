@@ -7,52 +7,22 @@
 sourceconf "$PLATFORM_CONF"
 
 function _term_nodes(){
+    for i in "$@"
+    do
+    case $i in
+        -u)
+        UNATTEND="1"
+        ;;
+        *)
+    esac
+    done
+
+
+
     INSTS="worker master"
     for INST in $INSTS; do
         echo "Terminating ${INST}s"
-        if [ ! -f "./bin/${INST}_init_output.json" ]; then
-            echo "No ${INST}_init_output.json found - No doing anything"
-        else
-            SPOT_INSTS=""
-            INST_STR=""
-            ret_init_inst $INST "SPOT_INSTS"
-            ret_init_ips "INST_STR" "$SPOT_INSTS" 1
-            echo "$INST_STR"
-            INST_STR=$(echo "$INST_STR"|tr ";" " ")
-            echo "The init spot instances are: $SPOT_INSTS"
-            echo ""
-            echo "The current status is:"
-            echo ""
-            for I in $INST_STR; do
-                echo "$I"
-            done
-            echo ""
-            if [ "$1" == "1" ]; then
-                TERM_CONFIRM="Y"
-            else
-                read -e -p "Are you SURE you wish to terminate these instances? (Y/N): " -i "N" TERM_CONFIRM
-            fi
-            if [ "$TERM_CONFIRM" == "Y" ]; then
-                echo "Gonna term here"
-
-                echo "Terminating Instances and spot requests"
-                for MYINST in $INST_STR; do
-                    IID=$(echo "$MYINST"|cut -d"," -f1)
-                    SID=$(echo "$MYINST"|cut -d"," -f2)
-                    IIP=$(echo "$MYINST"|cut -d"," -f3)
-                    EIP=$(echo "$MYINST"|cut -d"," -f4)
-
-                    echo "Canceling Spot Request for $SID which is instance $IID running on $IIP/$EIP"
-                    ${PLAT_CMD} ec2 cancel-spot-instance-requests --spot-instance-request-ids $SID
-                    ${PLAT_CMD} ec2 terminate-instances --instance-ids $IID
-                done
-                echo ""
-                echo "Removing ./bin/${INST}_init_output.json"
-            rm ./bin/${INST}_init_output.json
-            else
-                echo "Not Terminating"
-            fi
-        fi
+        term_nodes $INST $UNATTEND
     done
 }
 _term_nodes "$@"

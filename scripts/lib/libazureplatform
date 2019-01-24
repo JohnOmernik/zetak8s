@@ -1,61 +1,271 @@
 #!/bin/bash
 #
-# libawsplatform - Library scripts to define out functions for aws
-  #
+# libazureplatform - Library scripts to define out functions for azure
+#
 # plat_install - install the command line tools for the platform
-DEFAULT_PLAT_USERS="ubuntu centos"
+
+
+DEFAULT_PLAT_USERS="ubuntu"
 DEFAULT_PLAT_NETWORK="eth0"
-DEFAULT_PLAT_CMD="aws"
-DEFAULT_PLAT_VER="--version"
+DEFAULT_PLAT_CMD="az"
+DEFAULT_PLAT_VER="--help"
 DEFAULT_INIT_MASTER_NUM_NODES="3"
 DEFAULT_INIT_WORKER_NUM_NODES="6"
 DEFAULT_INIT_MASTER_OS_SIZE="100"
 DEFAULT_INIT_WORKER_OS_SIZE="750"
-DEFAULT_INIT_DATA_SIZE="16"
+DEFAULT_INIT_DATA_SIZE="64"
 DEFAULT_INIT_NUM_DATA_VOL="3"
 
-DEFAULT_INIT_SUPPORT_SPOT="Y"
-DEFAULT_INIT_RESOURCE_GROUP="NA"
-DEFAULT_INIT_INST_MASTER_TYPE="m5.2xlarge"
-DEFAULT_INIT_TEMP_MASTER_PRICE="0.18"     # 0.384 Full Price
-DEFAULT_INIT_INST_WORKER_TYPE="m5.4xlarge"
-DEFAULT_INIT_TEMP_WORKER_PRICE="0.30"     # 0.768 Full Price
-DEFAULT_INIT_SEC_GROUP="NA" # Can't specify here (We don't create in AWS yet)
+DEFAULT_INIT_SUPPORT_SPOT="N"
+DEFAULT_INIT_RESOURCE_GROUP="ZetaRG"
+DEFAULT_INIT_INST_MASTER_TYPE="D4s_v3"
+DEFAULT_INIT_TEMP_MASTER_PRICE="0"     # 0.384 Full Price
+DEFAULT_INIT_INST_WORKER_TYPE="DS5_v2"
+DEFAULT_INIT_TEMP_WORKER_PRICE="0"     # 0.768 Full Price
+DEFAULT_INIT_SEC_GROUP="ZetaSec"
 DEFAULT_INIT_ZONE="ANY"
-DEFAULT_INIT_REGION="us-west-2"
-DEFAULT_INIT_IMG="ami-0bbe6b35405ecebdb" # Ubuntu 18.04
+DEFAULT_INIT_REGION="westus2"
+DEFAULT_INIT_IMG="Canonical:UbuntuServer:18.10:18.10.201901220" # Ubuntu 18.04
 
-DEFAULT_DNS_UPSTREAM="172.31.0.2"
 
-DEFAULT_INIT_NET_NAME="NA"
-DEFAULT_INIT_NET_IP_RANGE="NA"
-DEFAULT_INIT_NET_SUBNET_NAME="NA"
-DEFAULT_INIT_NET_SUBNET_RANGE="NA"
-DEFAULT_INIT_AVAIL_GROUP="NA"
+DEFAULT_INIT_NET_NAME="ZetaNet"
+DEFAULT_INIT_NET_IP_RANGE="10.0.0.0/16"
+DEFAULT_INIT_NET_SUBNET_NAME="ZetaHosts"
+DEFAULT_INIT_NET_SUBNET_RANGE="10.0.1.0/24"
 
+DEFAULT_INIT_AVAIL_GROUP="ZetaAvail"
+
+DEFAULT_DNS_UPSTREAM="127.0.0.53"
+
+
+
+####
 
 function plat_install(){
     echo "--------------------------------------------"
-    echo "aws command not found, attempting to install"
+    echo "az command not found, attempting to install"
     echo "--------------------------------------------"
-    curl -O https://bootstrap.pypa.io/get-pip.py
-    python3 get-pip.py --user
-    pip install awscli --upgrade --user
+    echo ""
+    echo "Installing Prereqs (Ubuntu Only at this time)"
+    echo ""
+    sleep 4
+    sudo apt-get install apt-transport-https lsb-release software-properties-common dirmngr -y
+    echo ""
+    AZ_REPO=$(lsb_release -cs)
+    echo "Updating Repo Lists"
+    echo ""
+    sleep 1
+    echo "deb [arch=amd64] https://packages.microsoft.com/repos/azure-cli/ $AZ_REPO main" |sudo tee /etc/apt/sources.list.d/azure-cli.list
+    echo "Adding Microsoft Key"
+    echo ""
+    sleep 1
+    sudo apt-key --keyring /etc/apt/trusted.gpg.d/Microsoft.gpg adv --keyserver packages.microsoft.com --recv-keys BC528686B50D79E339D3721CEB3E94ADBE1229CF
+    echo "Updating apt"
+    sleep 2
+    sudo apt-get update
+    echo ""
+    echo "Installing Azure CLI"
+    echo ""
+    sudo apt-get install azure-cli
+
     $PLAT_CMD $PLAT_VER
     if [ "$?" != "0" ]; then
         echo "We were unable to get the platform command $PLAT_CMD installed.  Please manually install before proceeding. Also ensure it's in the path correctly, or update the PLAT_CMD to be a absoluate path"
     else
         echo "Platform installed correctly!"
+        echo "However, before you use az to build a zeta cluster you will have to provide login information to it manually using az login"
+        echo ""
     fi
-    rm get-pip.py
 
 }
 
 function set_region(){
     local MYREGION=$1
-    echo "Setting region with ${PLAT_CMD} to ${MYREGION}"
-    ${PLAT_CMD} configure set region ${MYREGION}
+    echo "Setting region doesn nothing yet in azure"
 }
+
+function start_nodes(){
+
+    # First Check to see if the Resource group already exists
+
+    CHKGRP=$($PLAT_CMD group list|jq -r '.[].name'|grep "${INIT_RESOURCE_GROUP}")
+    if [ "$CHKGRP" == "" ]; then
+        echo "Resource group not found... creating"
+        GRP=$($PLAT_CMD group create --name $INIT_RESOURCE_GROUP --location $INIT_REGION)
+        if [ "$?" != "0" ]; then
+            echo "Resource group creation failed, perhaps you need to login?"
+            echo ""
+            echo "$GRP"
+            exit 1
+        else
+            echo "Group created successfully!"
+            echo "$GRP"
+        fi
+    else
+        echo "Resource Group $INIT_RESOURCE_GROUP already exists: not creating"
+    fi
+
+    # Next check to see if the Network exists
+
+    CHKNET=$($PLAT_CMD network vnet list|jq -r '.[].name'|grep "${INIT_NET_NAME}")
+    if [ "$CHKNET" == "" ]; then
+        echo "Network not found... creating"
+        NET=$($PLAT_CMD network vnet create --resource-group $INIT_RESOURCE_GROUP --name $INIT_NET_NAME --address-prefix $INIT_NET_IP_RANGE --subnet-name $INIT_NET_SUBNET_NAME --subnet-prefix $INIT_NET_SUBNET_RANGE)
+        if [ "$?" != "0" ]; then
+            echo "Network Creation failed, perhaps you need to login"
+            echo ""
+            echo "$NET"
+            exit 1
+        else
+            echo "Network Created Successfully"
+            echo "$NET"
+        fi
+    else
+        echo "Network already exists, not creating... I hope the subnets line up for you :) "
+    fi
+
+    # Next Check if the Security group exists
+    CHKSEC=$($PLAT_CMD network nsg list|jq -r '.[].name'|grep "${INIT_SEC_GROUP}")
+    if [ "$CHKSEC" == "" ]; then
+        echo "Security Group not found... Creating"
+        SEC=$($PLAT_CMD network nsg create --resource-group ${INIT_RESOURCE_GROUP} --name ${INIT_SEC_GROUP})
+         if [ "$?" != "0" ]; then
+            echo "Network Security Group Creation failed, perhaps you need to login"
+            echo ""
+            echo "$SEC"
+            exit 1
+        else
+            echo "Network Security Group Created Successfully"
+            echo "$SEC"
+        fi
+        MYIP=$(curl -s http://whatismyip.akamai.com/)
+        echo ""
+        echo "Adding a rule for your IP address of $MYIP.  You may need to manually adjust later if your needs dictate"
+        echo ""
+        SECRULE=$($PLAT_CMD network nsg rule create --resource-group ${INIT_RESOURCE_GROUP} \
+                                                    --nsg-name ${INIT_SEC_GROUP} --description "Allow all from base IP" \
+                                                    --name "baseip" --priority 100 --access Allow --protocol '*' \
+                                                    --source-address-prefix "$MYIP" --source-port-ranges '*' \
+                                                    --destination-port-ranges '*' --destination-address-prefixes '*')
+        if [ "$?" != "0" ]; then
+            echo "Rule didn't really create, you may have a problem, or not... check it out...not exiting"
+            echo ""
+            echo "$SECRULE"
+        else
+            echo "Rule probably worked"
+            echo ""
+            echo "$SECRULE"
+        fi
+    else
+        echo "Network Security Group already exists, I hope you have the rules correct! :)"
+    fi
+
+    # Next Check and see if a Availability Group exists, if not create it
+    AVAILCHK=$($PLAT_CMD vm availability-set list|jq -r '.[].name'|grep "${INIT_AVAIL_GROUP}")
+    if [ "$AVAILCHK" == "" ]; then
+        echo "Did not find Availibility Set $INIT_AVAIL_GROUP - Creating"
+        AVAIL=$($PLAT_CMD vm availability-set create --resource-group $INIT_RESOURCE_GROUP --name $INIT_AVAIL_GROUP)
+        if [ "$?" != "0" ]; then
+            echo ""
+            echo "Availability Set couldn't be created, I guess good luck? :)"
+            echo ""
+            echo "$AVAIL"
+        else
+            echo "Availability Set Created!"
+            echo ""
+            echo "$AVAIL"
+        fi
+    else
+        echo "Availability Set $INIT_AVAIL_GROUP already exists - not creating, but not exiting either, hope things are peachy"
+    fi
+
+
+}
+
+function start_node(){
+    local RESOURCE_GROUP=$1
+    local NET_NAME=$2
+    local SUBNET_NAME=$3
+    local SEC_GROUP=$4
+    local AVAIL_GROUP=$5
+    local SRV_NAME=$6
+    local IMG_NAME=$7
+    local VM_SIZE=$8
+    local SSH_KEYFILE=$9
+    local ADMIN_USERNAME=${10}
+    local OS_SIZE=${11}
+
+    echo ""
+    echo "----------------------"
+    echo "Adding Node: $SRV_NAME"
+    echo ""
+    IP_NAME="${SRV_NAME}_ip"
+    NIC_NAME="${SRV_NAME}_nic"
+    VM_NAME="${SRV_NAME}"
+
+    # Create the Public IP Address
+    IPCHK=$($PLAT_CMD network public-ip list|jq -r '.[].name'|grep "${IP_NAME}")
+    if [ "$IPCHK" == "" ]; then
+        echo "Adding Public IP: $IP_NAME"
+        IP=$($PLAT_CMD network public-ip create --resource-group $INIT_RESOURCE_GROUP --name ${IP_NAME} --dns-name ${SRV_NAME})
+        if [ "$?" != "0" ]; then
+            echo ""
+            echo "IP not created - Good luck"
+            echo ""
+            echo "$IP"
+        else
+            echo ""
+            echo "IP Created"
+            echo ""
+            echo "$IP"
+        fi
+    else
+        echo "So the IP named $IP_NAME exists.. not sure what to do here..."
+    fi
+    # Create the virtual NIC
+    NICCHK=$($PLAT_CMD network nic list|jq -r '.[].name'|grep "${NIC_NAME}")
+    if [ "$NICCHK" == "" ]; then
+        echo "Creating NIC $NIC_NAME for vm"
+        NIC=$($PLAT_CMD network nic create --resource-group $INIT_RESOURCE_GROUP --name $NIC_NAME \
+                                           --vnet-name $NET_NAME --subnet $SUBNET_NAME --public-ip-address $IP_NAME --network-security-group $SEC_GROUP)
+        if [ "$?" != "0" ]; then
+            echo ""
+            echo "Virtual NIC Creation Error - Good luck"
+            echo ""
+            echo "$NIC"
+        else
+            echo ""
+            echo "NIC Created"
+            echo ""
+            echo "$NIC"
+        fi
+    else
+        echo "So the Virtual NIC $NIC_NAME alreay exists, are you ok?"
+    fi
+    # Create the VM
+    VMCHK=$($PLAT_CMD vm list|jq -r '.[].name'|grep "${VM_NAME}")
+    if [ "$VMCHK" == "" ]; then
+        echo "Creating VM $VM_NAME"
+        VM=$($PLAT_CMD vm create --name $VM_NAME --resource-group $INIT_RESOURCE_GROUP --location $INIT_REGION --availability-set $AVAIL_GROUP \
+                                 --nics $NIC_NAME --image $IMG_NAME --admin-username $ADMIN_USERNAME --size $VM_SIZE
+                                 --ssh-key-value $(cat $INIT_PUB_KEY_LOC) --os-disk-size-gb $OS_SIZE
+
+            )
+    else
+        echo "VM Name $VM_NAME seems to exist.... but do you exist?"
+    fi
+}
+
+
+function term_nodes(){
+    echo "Goodbye Nodes"
+
+}
+
+###########################################
+
+
+    
 # Delete Network LB
 
 function delete_network_lb(){
@@ -169,25 +379,6 @@ function create_network_lb_targetgroup(){
 
 
 }
-#   aws elbv2 create-target-group --name funtime-targets --protocol TCP --port 6443 --vpc-id vpc-ce58bbab
-#{
-#    "TargetGroups": [
-#        {
-#            "VpcId": "vpc-ce58bbab",
-#            "HealthCheckTimeoutSeconds": 10,
-#            "TargetGroupArn": "arn:aws:elasticloadbalancing:us-west-2:793246819526:targetgroup/funtime-targets/5a330318f40454b6",
-#            "HealthCheckProtocol": "TCP",
-#            "HealthCheckIntervalSeconds": 30,
-#            "UnhealthyThresholdCount": 3,
-#            "HealthCheckPort": "traffic-port",
-#            "Protocol": "TCP",
-#            "HealthyThresholdCount": 3,
-#            "Port": 6443,
-#            "TargetGroupName": "funtime-targets",
-#            "TargetType": "instance"
-#        }
-#    ]
-#}
 function create_network_lb(){
     local LB_NAME=$1
     local LB_SNID=$2
@@ -244,7 +435,7 @@ function create_network_lb(){
 
 
 function test_plat(){
-    echo "Hey it looks like the AWS libawsplatform has been imported correctly!"
+    echo "Hey it looks like the Azure libazureplatform has been imported correctly!"
 }
 
 
@@ -353,130 +544,3 @@ function ret_init_ips() {
 
 }
 
-function term_nodes(){
-    local INST=$1
-    local UNATTEND=$2
-    if [ ! -f "./bin/${INST}_init_output.json" ]; then
-        echo "No ${INST}_init_output.json found - No doing anything"
-    else
-        SPOT_INSTS=""
-        INST_STR=""
-        ret_init_inst $INST "SPOT_INSTS"
-        ret_init_ips "INST_STR" "$SPOT_INSTS" 1
-        echo "$INST_STR"
-        INST_STR=$(echo "$INST_STR"|tr ";" " ")
-        echo "The init spot instances are: $SPOT_INSTS"
-        echo ""
-        echo "The current status is:"
-        echo ""
-        for I in $INST_STR; do
-            echo "$I"
-        done
-        echo ""
-        if [ "$UNATTEND" == "1" ]; then
-            TERM_CONFIRM="Y"
-        else
-            read -e -p "Are you SURE you wish to terminate these instances? (Y/N): " -i "N" TERM_CONFIRM
-        fi
-        if [ "$TERM_CONFIRM" == "Y" ]; then
-            echo "Gonna term here"
-            echo "Terminating Instances and spot requests"
-            for MYINST in $INST_STR; do
-                IID=$(echo "$MYINST"|cut -d"," -f1)
-                SID=$(echo "$MYINST"|cut -d"," -f2)
-                IIP=$(echo "$MYINST"|cut -d"," -f3)
-                EIP=$(echo "$MYINST"|cut -d"," -f4)
-                echo "Canceling Spot Request for $SID which is instance $IID running on $IIP/$EIP"
-                ${PLAT_CMD} ec2 cancel-spot-instance-requests --spot-instance-request-ids $SID
-                ${PLAT_CMD} ec2 terminate-instances --instance-ids $IID
-            done
-            echo ""
-            echo "Removing ./bin/${INST}_init_output.json"
-        rm ./bin/${INST}_init_output.json
-        else
-            echo "Not Terminating"
-        fi
-    fi
-}
-
-function start_nodes(){
-    local INSTTYPE=$1
-
-    write_spec_json "$INSTTYPE"
-
-    if [ "$INSTTYPE" == "master" ]; then
-        INIT_PRICE="$INIT_TEMP_MASTER_PRICE"
-        NUM_NODES="$INIT_MASTER_NUM_NODES"
-    elif [ "$INSTTYPE" == "worker" ]; then
-        INIT_PRICE="$INIT_TEMP_WORKER_PRICE"
-        NUM_NODES="$INIT_WORKER_NUM_NODES"
-    fi
-
-
-    if [ -f "./bin/${INSTTYPE}_init_output.json" ]; then
-        echo "There appears to be a ${INSTTYPE}_init_output.json already, not doing anything"
-    else
-        INST_OUT=$(${PLAT_CMD} ec2 request-spot-instances --spot-price "$INIT_PRICE" --instance-count $NUM_NODES --type "one-time" --launch-specification file://./bin/${INSTTYPE}_specification.json)
-        echo "$INST_OUT" > ./bin/${INSTTYPE}_init_output.json
-        ret_init_inst "$INSTTYPE" "SPOT_INSTS"
-        echo "Created Spot Requests $SPOT_INSTS"
-        echo "Results outputted to ${INSTTYPE}_init_output.json"
-    fi
-    echo ""
-}
-
-function write_spec_json(){
-    local INSTTYPE=$1
-    DRIVES="b c d e f g h i j k l m n o p q r s t u v w x y z"
-    OUTDRIVE=""
-
-    if [ ! -d "./bin" ]; then
-        mkdir -p ./bin
-    fi
-
-    if [ "$INSTTYPE" == "worker" ]; then
-        OS_SIZE="${INIT_WORKER_OS_SIZE}"
-        INST_TYPE="${INIT_INST_WORKER_TYPE}"
-    else
-        OS_SIZE="${INIT_MASTER_OS_SIZE}"
-        INST_TYPE="${INIT_INST_MASTER_TYPE}"
-    fi
-    OS_DRIVE="{ \"DeviceName\": \"/dev/sda1\", \"Ebs\": { \"VolumeSize\": $OS_SIZE } },"
-    OUTDRIVE="$OS_DRIVE"$'\n'
-
-    if [ "$INSTTYPE" == "worker" ]; then
-        DCOUNT=0
-        for X in $DRIVES; do
-            if [ "$DCOUNT" -lt "$INIT_NUM_DATA_VOL" ]; then
-                OUTDRIVE="$OUTDRIVE{ \"DeviceName\": \"/dev/sd$X\", \"Ebs\": { \"VolumeSize\": $INIT_DATA_SIZE } },"$'\n'
-            fi
-            DCOUNT=$(( $DCOUNT + 1 ))
-        done
-    fi
-    OUTDRIVE=$(echo -n "$OUTDRIVE"|tr '\n' '~'|sed "s/,~$//"|tr "~" "\n")
-
-    echo "Outputting specifications to ./bin/${INSTTYPE}_specifification.json"
-
-    INIT_OUT=""
-    if [ "$INIT_ZONE" != "ANY" ]; then
-        INIT_OUT="${INIT_OUT}  \"Placement\": {"$'\n'
-        INIT_OUT="${INIT_OUT}    \"AvailabilityZone\": \"${INIT_ZONE}\""$'\n'
-        INIT_OUT="${INIT_OUT}  },"$'\n'
-    else
-        INIT_OUT=""
-    fi
-
-cat > ./bin/${INSTTYPE}_specification.json << EOF
-{
-  "ImageId": "$INIT_IMG",
-  "KeyName": "$INIT_KEY_NAME",
-  "SecurityGroupIds": [ "$INIT_SEC_GROUP" ],
-  "InstanceType": "${INST_TYPE}",
-${INIT_OUT}
-  "BlockDeviceMappings": [
-    $OUTDRIVE
-  ]
-}
-EOF
-
-}

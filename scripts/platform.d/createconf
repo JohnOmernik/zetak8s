@@ -9,6 +9,7 @@ function _platformcreateconf() {
 
     DEF_PLATFORM="libawsplatform"
     DEF_INIT_KEY_LOC="/home/$CURUSER/.ssh/id_rsa"
+    DEF_INIT_PUB_KEY_LOC="/home/$CURUSER/.ssh/id_rsa.pub"
     DEF_INIT_KEY_NAME="id_rsa"
 
     UNATTEND="0"
@@ -30,6 +31,9 @@ function _platformcreateconf() {
         ;;
         "-kl="*)
         T_INIT_KEY_LOC="${i#*=}"
+        ;;
+        "-pkl="*)
+        T_INIT_PUB_KEY_LOC="${i#*=}"
         ;;
         "-kn="*)
         T_INIT_KEY_NAME="${i#*=}"
@@ -61,6 +65,9 @@ function _platformcreateconf() {
         "-z="*)
         T_INIT_ZONE="${i#*=}"
         ;;
+        "-rg="*)
+        T_INIT_RESOURCE_GROUP="${i#*=}"
+        ;;
         "-r="*)
         T_INIT_REGION="${i#*=}"
         ;;
@@ -75,6 +82,21 @@ function _platformcreateconf() {
         ;;
         "-twp="*)
         T_INIT_TEMP_WORKER_PRICE="${i#*=}"
+        ;;
+        "-nn="*)
+        T_INIT_NET_NAME="${i#*=}"
+        ;;
+        "-nir="*)
+        T_INIT_NET_IP_RANGE="${i#*=}"
+        ;;
+        "-nsn="*)
+        T_INIT_NET_SUBNET_NAME="${i#*=}"
+        ;;
+        "-nsr="*)
+        T_INIT_NET_SUBNET_RANGE="${i#*=}"
+        ;;
+        "-ag="*)
+        T_INIT_AVAIL_GROUP="${i#*=}"
         ;;
 
         *)
@@ -113,6 +135,24 @@ function _platformcreateconf() {
         echo "Platform file $PLATFORM not found at $PLAT_LIB - Exiting"
         exit 1
     fi
+    echo ""
+    echo "-----------------------------------"
+    echo ""
+    echo "The Platform command for your choosen platform is: $PLAT_CMD, we will now check to see if we can run $PLAT_CMD $PLAT_VER"
+    echo ""
+    $PLAT_CMD $PLAT_VER
+    if [ "$?" != "0" ]; then
+        echo "The platform version command returned an error rather than a version. We will not attemp to run the default platform install"
+        plat_install
+        $PLAT_CMD $PLAT_VER
+        if [ "$?" != "0" ]; then
+            echo "Even after trying to run the platform install, the platform version failed, sorry, exiting"
+            exit 1
+        fi
+    else
+        echo "Your platform command was found and returned a version. Please ensure you have embedded the appropriate authentication into the commmand to ensure proper opertion"
+    fi
+    echo ""
 
     echo ""
     echo "-----------------------------------"
@@ -140,9 +180,12 @@ function _platformcreateconf() {
     echo ""
     if [ "$UNATTEND" == "1" ]; then
         INIT_KEY_LOC=${T_INIT_KEY_LOC:-$DEF_INIT_KEY_LOC}
+        INIT_PUB_KEY_LOC=${T_INIT_PUB_KEY_LOC:-$DEF_INIT_PUB_KEY_LOC}
         INIT_KEY_NAME=${T_INIT_KEY_NAME:-$DEF_INIT_KEY_NAME}
     else
-        read -e -p "Private key for initial user on aws nodes: " -i "$DEF_INIT_KEY_LOC" INIT_KEY_LOC
+        read -e -p "Private key for initial user on nodes: " -i "$DEF_INIT_KEY_LOC" INIT_KEY_LOC
+        echo ""
+        read -e -p "Public key for initial user on nodes: " -i "$DEF_INIT_PUB_KEY_LOC" INIT_PUB_KEY_LOC
         echo ""
         read -e -p "What does your platform call this key: " -i "$DEV_INIT_KEY_NAME" INIT_KEY_NAME
         echo ""
@@ -164,24 +207,6 @@ function _platformcreateconf() {
         read -e -p "Interface to check list: " -i "$DEFAULT_PLAT_NETWORK" INTERFACE_LIST
         echo ""
     fi
-    echo ""
-    echo "-----------------------------------"
-    echo ""
-    echo "The Platform command for your choosen platform is: $PLAT_CMD, we will now check to see if we can run $PLAT_CMD $PLAT_VER"
-    echo ""
-    $PLAT_CMD $PLAT_VER
-    if [ "$?" != "0" ]; then
-        echo "The platform version command returned an error rather than a version. We will not attemp to run the default platform install"
-        plat_install
-        $PLAT_CMD $PLAT_VER
-        if [ "$?" != "0" ]; then
-            echo "Even after trying to run the platform install, the platform version failed, sorry, exiting"
-            exit 1
-        fi
-    else
-        echo "Your platform command was found and returned a version. Please ensure you have embedded the appropriate authentication into the commmand to ensure proper opertion"
-    fi
-    echo ""
     echo "-----------------------------------"
     echo "We will using the platform library: $PLATFORM - Now we are going to discuss provisioning of initial nodes"
     echo ""
@@ -202,6 +227,26 @@ function _platformcreateconf() {
         INIT_SEC_GROUP=${T_INIT_SEC_GROUP:-$DEFAULT_INIT_SEC_GROUP}
         INIT_TEMP_MASTER_PRICE=${T_INIT_TEMP_MASTER_PRICE:-$DEFAULT_INIT_TEMP_MASTER_PRICE}
         INIT_TEMP_WORKER_PRICE=${T_INIT_TEMP_WORKER_PRICE:-$DEFAULT_INIT_TEMP_WORKER_PRICE}
+        if [ "$DEFAULT_INIT_RESOURCE_GROUP" == "NA" ]; then
+            INIT_RESOURCE_GROUP="NA"
+        else
+            INIT_RESOURCE_GROUP=${T_INIT_RESOURCE_GROUP:-$DEFAULT_INIT_RESOURCE_GROU}
+        fi
+        if [ "$DEFAULT_INIT_NET_NAME" == "NA" ]; then
+            INIT_NET_NAME="$DEFAULT_INIT_NET_NAME"
+            INIT_NET_IP_RANGE="$DEFAULT_NET_IP_RANGE"
+            INIT_NET_SUBNET_NAME="$DEFAULT_INIT_NET_SUBNET_NAME"
+            INIT_NET_SUBNET_RANGE="$DEFAULT_INIT_NET_RANGE"
+            INIT_AVAIL_GROUP="$DEFAULT_INIT_AVAIL_GROUP"
+        else
+            INIT_NET_NAME=${T_INIT_NET_NAME:-$DEFAULT_INIT_NET_NAME}
+            INIT_NET_IP_RANGE=${T_INIT_NET_IP_RANGE:-$DEFAULT_INIT_NET_IP_RANGE}
+            INIT_NET_SUBNET_NAME=${T_INIT_NET_SUBNET_NAME:-$DEFAULT_INIT_NET_SUBNET_NAME}
+            INIT_NET_SUBNET_RANGE=${T_INIT_NET_SUBNET_RANGE:-$DEFAULT_INIT_NET_SUBNET_RANGE}
+            INIT_AVAIL_GROUP=${T_INIT_AVAIL_GROUP:-$DEFAULT_INIT_AVAIL_GROUP}
+
+        fi
+
     else
         echo ""
         read -e -p "How many initial nodes (masters): " -i "${DEFAULT_INIT_MASTER_NUM_NODES}" INIT_MASTER_NUM_NODES
@@ -216,29 +261,57 @@ function _platformcreateconf() {
         echo ""
         read -e -p "How many data volumes do you want? " -i "${DEFAULT_INIT_NUM_DATA_VOL}" INIT_NUM_DATA_VOL
         echo ""
-        read -e -p "Which instance size do you wish to use for masters: " -i "$DEFAULT_INST_MASTER_TYPE" INIT_INST_MASTER_TYPE
+        read -e -p "Which instance size do you wish to use for masters: " -i "$DEFAULT_INIT_INST_MASTER_TYPE" INIT_INST_MASTER_TYPE
         echo ""
-        read -e -p "Which instance size do you wish to use for workers: " -i "$DEFAULT_INST_WORKER_TYPE" INIT_INST_WORKER_TYPE
+        read -e -p "Which instance size do you wish to use for workers: " -i "$DEFAULT_INIT_INST_WORKER_TYPE" INIT_INST_WORKER_TYPE
         echo ""
         read -e -p "Which zone do you want to place these in: " -i "$DEFAULT_INIT_ZONE" INIT_ZONE
         echo ""
-        read -e -p "Which region do you want to place these in: "-i "$DEFAULT_INIT_REGION" INIT_REGION
+        read -e -p "Which region do you want to place these in: " -i "$DEFAULT_INIT_REGION" INIT_REGION
         echo ""
         read -e -p "Which image do you wish to use: " -i "$DEFAULT_INIT_IMG" INIT_IMG
         echo ""
         read -e -p "Please enter the Security group you wish to use: " -i "$DEFAULT_INIT_SEC_GROUP" INIT_SEC_GROUP
         echo ""
-        read -e -p "Some providers use temp nodes as a cheaper option (AWS uses spot requests) Do you wish to use these? (Y/N): " -i "Y" INIT_TEMP_REQ
-        if [ "$INIT_TEMP_REQ" == "Y" ]; then
-            echo ""
-            read -e -p "What price do you wish to use as your temp request offer for Masters? (${INIT_INST_MASTER_TYPE}): " -i "${DEFAULT_INST_MASTER_SPOT_PRICE}" INIT_TEMP_MASTER_PRICE
-            echo ""
-            read -e -p "What price do you wish to use as your temp request offer for Workers? (${INIT_INST_WORKER_TYPE}): " -i "${DEFAULT_INST_WORKER_SPOT_PRICE}" INIT_TEMP_WORKER_PRICE
-            echo ""
+        if [ "$DEFAULT_INIT_RESOURCE_GROUP" == "NA" ]; then
+            INIT_RESOURCE_GROUP="NA"
+        else
+            read -e -p "What resource group (platform specific to you wish to use?): " -i "${DEFAULT_INIT_RESOURCE_GROUP" INIT_RESOURCE_GROUP
+        fi
+        if [ "$DEFAULT_INIT_SUPPORT_SPOT" == "Y" ]; then
+         read -e -p "Some providers use temp nodes as a cheaper option (AWS uses spot requests) Do you wish to use these? (Y/N): " -i "Y" INIT_TEMP_REQ
+            if [ "$INIT_TEMP_REQ" == "Y" ]; then
+                echo ""
+                read -e -p "What price do you wish to use as your temp request offer for Masters? (${INIT_INST_MASTER_TYPE}): " -i "${DEFAULT_INST_MASTER_SPOT_PRICE}" INIT_TEMP_MASTER_PRICE
+                echo ""
+                read -e -p "What price do you wish to use as your temp request offer for Workers? (${INIT_INST_WORKER_TYPE}): " -i "${DEFAULT_INST_WORKER_SPOT_PRICE}" INIT_TEMP_WORKER_PRICE
+                echo ""
+            else
+                INIT_TEMP_MASTER_PRICE="0"
+                INIT_TEMP_WORKER_PRICE="0"
+            fi
         else
             INIT_TEMP_MASTER_PRICE="0"
             INIT_TEMP_WORKER_PRICE="0"
         fi
+        if [ "$DEFAULT_INIT_NET_NAME" == "NA" ]; then
+            INIT_NET_NAME="$DEFAULT_INIT_NET_NAME"
+            INIT_NET_IP_RANGE="$DEFAULT_NET_IP_RANGE"
+            INIT_NET_SUBNET_NAME="$DEFAULT_INIT_NET_SUBNET_NAME"
+            INIT_NET_SUBNET_RANGE="$DEFAULT_INIT_NET_RANGE"
+        else
+            echo ""
+            echo "Your chosen provider requries a netgroup. If you pick a name that already exists, we'll use that network otherwise, we'll create it"
+            echo ""
+            read -e -p "Please enter the name of the network to use: " -i "$DEFAULT_INIT_NET_NAME" INIT_NET_NAME
+            echo ""
+            read -e -p "Please enter the IP Range for this netgroup (if it doesn't exist): " -i "$DEFAULT_INIT_NET_IP_RANGE" INIT_NET_IP_RANGE
+            echo ""
+            read -e -p "Please enter the subnet name to use for host IPs: " -i "$DEFAULT_INIT_NET_SUBNET_NAME" INIT_NET_SUBNET_NAME
+            echo ""
+            read -e -p "Please enter the IP range for host IPs (must be in above subnet): " -i "$DEFAULT_INIT_NET_SUBNET_RANGE" INIT_NET_SUBNET_RANGE
+            echo ""
+            read -e -p "Please enter the name of the availability group: " -i "$DEFAULT_INIT_AVAIL_GROUP" INIT_AVAIL_GROUP
     fi
 
     touch $PLATFORM_CONF
@@ -254,6 +327,7 @@ INIT_USERS="$INIT_USERS"
 
 # INIT_KEY_LOC is the location of the SSH private key to connect to the cluster with
 INIT_KEY_LOC="$INIT_KEY_LOC"
+INIT_PUB_KEY_LOC="$INIT_PUB_KEY_LOC"
 INIT_KEY_NAME="$INIT_KEY_NAME"
 
 #PLATFORM
@@ -268,6 +342,7 @@ PLAT_CMD="$PLAT_CMD"
 PLAT_VER="$PLAT_VER"
 
 #INIT NODE INFO
+INIT_RESOURCE_GROUP="$RESOURCE_INIT_GROUP"
 INIT_MASTER_NUM_NODES="$INIT_MASTER_NUM_NODES"
 INIT_WORKER_NUM_NODES="$INIT_WORKER_NUM_NODES"
 INIT_MASTER_OS_SIZE="$INIT_MASTER_OS_SIZE"
@@ -284,6 +359,12 @@ INIT_SEC_GROUP="$INIT_SEC_GROUP"
 INIT_TEMP_MASTER_PRICE="$INIT_TEMP_MASTER_PRICE"
 INIT_TEMP_WORKER_PRICE="$INIT_TEMP_WORKER_PRICE"
 
+INIT_NET_NAME="$INIT_NET_NAME"
+INIT_NET_IP_RANGE="$INIT_NET_IP_RANGE"
+INIT_NET_SUBNET_NAME="$INIT_NET_SUBNET_NAME"
+INIT_NET_SUBNET_RANGE="$INIT_NET_SUBNET_RANGE"
+
+INIT_AVAIL_GROUP="$INIT_AVAIL_GROUP"
 # If this is set to 1, scripts will assume "Use" when the conf exists.
 PLATFORM_LOCKED="1"
 EOF
