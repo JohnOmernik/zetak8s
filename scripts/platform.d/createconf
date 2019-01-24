@@ -276,7 +276,7 @@ function _platformcreateconf() {
         if [ "$DEFAULT_INIT_RESOURCE_GROUP" == "NA" ]; then
             INIT_RESOURCE_GROUP="NA"
         else
-            read -e -p "What resource group (platform specific to you wish to use?): " -i "${DEFAULT_INIT_RESOURCE_GROUP" INIT_RESOURCE_GROUP
+            read -e -p "What resource group (platform specific to you wish to use?): " -i "${DEFAULT_INIT_RESOURCE_GROUP}" INIT_RESOURCE_GROUP
         fi
         if [ "$DEFAULT_INIT_SUPPORT_SPOT" == "Y" ]; then
          read -e -p "Some providers use temp nodes as a cheaper option (AWS uses spot requests) Do you wish to use these? (Y/N): " -i "Y" INIT_TEMP_REQ
@@ -312,6 +312,7 @@ function _platformcreateconf() {
             read -e -p "Please enter the IP range for host IPs (must be in above subnet): " -i "$DEFAULT_INIT_NET_SUBNET_RANGE" INIT_NET_SUBNET_RANGE
             echo ""
             read -e -p "Please enter the name of the availability group: " -i "$DEFAULT_INIT_AVAIL_GROUP" INIT_AVAIL_GROUP
+        fi
     fi
 
     touch $PLATFORM_CONF
