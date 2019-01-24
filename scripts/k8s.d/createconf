@@ -242,7 +242,7 @@ EOK
     else
         read -e -p "Please enter the service IP of the Cluster DNS Server: " -i "$DEF_CLUSTER_DNS_IP" CLUSTER_DNS_IP
         echo ""
-        read -e -p "Please enter the upstream DNS of the Cluster (prov by platform) (This can be comma separated): " -i "$DEFAULT_UPSTREAM_DNS" UPSTREAM_DNS
+        read -e -p "Please enter the upstream DNS of the Cluster (prov by platform) (This can be comma separated): " -i "$DEFAULT_DNS_UPSTREAM" DNS_UPSTREAM
         echo ""
         read -e -p "Please enter the reverse DNS cidrs: " -i "$DEF_REVERSE_CIDRS" REVERSE_CIDRS
         echo ""
